@@ -217,7 +217,6 @@ rg -n "(api[_-]?key|token|secret|password|BEGIN (RSA|OPENSSH|EC|PGP) PRIVATE KEY
 For full step-by-step release and protection settings:
 
 - `docs/GITHUB_SETUP.md`
-- `docs/PUBLISH_TO_GITHUB_RU.md` (RU quick publish guide)
 - `docs/HOMEBREW.md`
 
 ## Limitations
@@ -233,7 +232,6 @@ For full step-by-step release and protection settings:
 - Releasing: `docs/RELEASING.md`
 - Homebrew distribution: `docs/HOMEBREW.md`
 - GitHub setup: `docs/GITHUB_SETUP.md`
-- GitHub publish guide (RU): `docs/PUBLISH_TO_GITHUB_RU.md`
 - Changelog: `CHANGELOG.md`
 
 ## Contributing

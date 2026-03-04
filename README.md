@@ -21,7 +21,9 @@ Install via Homebrew (recommended):
 ```bash
 brew tap PaladinXL/notes-matrix
 brew install notes-matrix
+# after install, command is available globally
 notes-matrix help
+notes-matrix
 ```
 
 Build from source:
@@ -103,6 +105,24 @@ Or run binary directly after build:
 
 ```bash
 .build/debug/notes-matrix export --output /absolute/path
+```
+
+## Update
+
+Update Homebrew package:
+
+```bash
+brew update
+brew upgrade notes-matrix
+```
+
+If tap metadata is stale:
+
+```bash
+brew update-reset
+brew untap PaladinXL/notes-matrix
+brew tap PaladinXL/notes-matrix
+brew upgrade notes-matrix
 ```
 
 ## Graphics in Markdown

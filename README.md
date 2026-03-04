@@ -3,9 +3,7 @@
 `notes-matrix` is a macOS Swift CLI/TUI that exports Apple Notes to Markdown
 while preserving account/folder hierarchy.
 
-> Replace `<your-username>` and `<repo>` after creating your GitHub repository.
->
-> [![CI](https://github.com/<your-username>/<repo>/actions/workflows/ci.yml/badge.svg)](https://github.com/<your-username>/<repo>/actions/workflows/ci.yml)
+> [![CI](https://github.com/PaladinXL/notes-matrix/actions/workflows/ci.yml/badge.svg)](https://github.com/PaladinXL/notes-matrix/actions/workflows/ci.yml)
 > ![Platform](https://img.shields.io/badge/platform-macOS-0f172a)
 > ![Swift](https://img.shields.io/badge/swift-5.9+-F05138)
 > ![License: Non--Commercial](https://img.shields.io/badge/license-non--commercial-red)
@@ -17,6 +15,16 @@ This tool focuses on practical migration and backup workflows for Obsidian-like
 vault structures.
 
 ## Quick Start
+
+Install via Homebrew (recommended):
+
+```bash
+brew tap PaladinXL/notes-matrix
+brew install notes-matrix
+notes-matrix help
+```
+
+Build from source:
 
 ```bash
 swift build
@@ -54,21 +62,6 @@ swift run notes-matrix export --output /absolute/path --with-attachments
 - Swift toolchain (Xcode CLT is enough)
 - Notes automation permission for terminal app
 - Homebrew (optional, for package-manager install)
-
-## Install (Homebrew)
-
-After publishing releases and tap formula:
-
-```bash
-brew tap <your-username>/notes-matrix
-brew install notes-matrix
-```
-
-If Homebrew is not installed yet:
-
-```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-```
 
 ## Build
 

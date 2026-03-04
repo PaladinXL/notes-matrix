@@ -1,0 +1,26 @@
+# macOS
+.DS_Store
+
+# SwiftPM / build
+.build/
+.swiftpm/
+Package.resolved
+
+# Xcode user data
+DerivedData/
+*.xcworkspace
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcuserstate
+
+# Logs
+*.log
+
+# Editor
+.idea/
+.vscode/
+
+# Runtime export artifacts
+notes-export/
+notes-export.zip
+NotesExport/

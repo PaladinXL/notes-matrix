@@ -2,6 +2,32 @@ import Foundation
 import Darwin
 
 enum NotesMatrixCLI {
+    enum ScheduleError: Error, CustomStringConvertible {
+        case invalidCommand
+        case invalidTimeFormat(String)
+        case executablePathNotFound
+        case launchctlFailed(String)
+
+        var description: String {
+            switch self {
+            case .invalidCommand:
+                return "schedule command is invalid. Use: schedule install|status|run-now|remove"
+            case .invalidTimeFormat(let value):
+                return "invalid time '\(value)'. Expected format: HH:MM"
+            case .executablePathNotFound:
+                return "could not resolve executable path for schedule setup"
+            case .launchctlFailed(let message):
+                return "launchctl failed: \(message)"
+            }
+        }
+    }
+
+    struct ScheduleDefinition {
+        let hour: Int
+        let minute: Int
+        let exportArgs: [String]
+    }
+
     struct InteractiveState {
         var outputPath: String
         var mode: ExportMode
@@ -300,6 +326,8 @@ enum NotesMatrixCLI {
                 )
                 saveManifest(from: metadataForManifest ?? [], context: context, to: manifestURL(for: URL(fileURLWithPath: output, isDirectory: true)))
             }
+        case "schedule":
+            try runSchedule(args: Array(args.dropFirst()))
         case "help", "--help", "-h":
             printHelp()
         default:
@@ -686,6 +714,10 @@ enum NotesMatrixCLI {
               notes-matrix scan
               notes-matrix help
               notes-matrix export --output /path/to/dir [--zip] [--with-attachments] [--on-existing overwrite|skip|uniquify] [--filename-mode unicode|ascii] [--incremental]
+              notes-matrix schedule install --daily HH:MM [--output /path] [--zip] [--with-attachments] [--on-existing overwrite|skip|uniquify] [--filename-mode unicode|ascii] [--incremental]
+              notes-matrix schedule status
+              notes-matrix schedule run-now
+              notes-matrix schedule remove
 
             Commands:
               scan
@@ -693,6 +725,9 @@ enum NotesMatrixCLI {
 
               export
                 Export notes to Markdown using current flags.
+
+              schedule
+                Manage daily background export via launchd.
 
               help
                 Show this help message.
@@ -739,6 +774,10 @@ enum NotesMatrixCLI {
               notes-matrix export --output ~/Desktop/NotesExport --with-attachments --on-existing skip
               notes-matrix export --output ~/Desktop/NotesExport --filename-mode ascii
               notes-matrix export --output ~/Desktop/NotesExport --with-attachments --incremental
+              notes-matrix schedule install --daily 09:00 --output ~/Desktop/NotesExport --incremental
+              notes-matrix schedule status
+              notes-matrix schedule run-now
+              notes-matrix schedule remove
 
             Notes:
               - On first run macOS will ask Automation permission for Notes.
@@ -746,6 +785,224 @@ enum NotesMatrixCLI {
               - Fast mode skips deep attachment extraction but keeps raw HTML snapshot.
             """
         )
+    }
+
+    static func runSchedule(args: [String]) throws {
+        guard let subcommand = args.first else { throw ScheduleError.invalidCommand }
+
+        switch subcommand {
+        case "install":
+            guard let daily = parseFlag("--daily", args: args) else {
+                throw ScheduleError.invalidTimeFormat("missing --daily")
+            }
+            let (hour, minute) = try parseDailyTime(daily)
+            let output = parseFlag("--output", args: args) ?? NSHomeDirectory() + "/Desktop/NotesExport"
+            let includeAttachments = args.contains("--with-attachments")
+            let zipEnabled = args.contains("--zip")
+            let incremental = args.contains("--incremental")
+            let existingPolicy = parseFlag("--on-existing", args: args).flatMap { ExistingItemPolicy(rawValue: $0) } ?? .overwrite
+            let filenameMode = parseFlag("--filename-mode", args: args).flatMap { FilenameMode(rawValue: $0) } ?? .unicodeSafe
+
+            var exportArgs = ["export", "--output", output, "--on-existing", existingPolicy.rawValue, "--filename-mode", filenameMode.rawValue]
+            if zipEnabled { exportArgs.append("--zip") }
+            if includeAttachments { exportArgs.append("--with-attachments") }
+            if incremental { exportArgs.append("--incremental") }
+
+            let executable = try resolveExecutablePath()
+            let plistURL = schedulePlistURL()
+            let logsDir = scheduleLogsDirURL()
+            try FileManager.default.createDirectory(at: logsDir, withIntermediateDirectories: true)
+            let stdoutPath = logsDir.appendingPathComponent("scheduled.log").path
+            let stderrPath = logsDir.appendingPathComponent("scheduled.error.log").path
+            let plist = renderSchedulePlist(
+                label: scheduleLabel(),
+                executablePath: executable,
+                exportArgs: exportArgs,
+                hour: hour,
+                minute: minute,
+                stdoutPath: stdoutPath,
+                stderrPath: stderrPath
+            )
+            let parent = plistURL.deletingLastPathComponent()
+            try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
+            try plist.write(to: plistURL, atomically: true, encoding: .utf8)
+
+            _ = runProcess("/bin/launchctl", ["unload", plistURL.path], allowFailure: true)
+            let load = runProcess("/bin/launchctl", ["load", plistURL.path], allowFailure: false)
+            if load.status != 0 {
+                throw ScheduleError.launchctlFailed(load.err.isEmpty ? load.out : load.err)
+            }
+
+            print("Schedule installed.")
+            print("time: \(String(format: "%02d:%02d", hour, minute)) daily")
+            print("agent: \(plistURL.path)")
+            print("logs: \(logsDir.path)")
+            print("run-now: notes-matrix schedule run-now")
+        case "status":
+            let plistURL = schedulePlistURL()
+            guard FileManager.default.fileExists(atPath: plistURL.path) else {
+                print("Schedule is not installed.")
+                return
+            }
+            let label = scheduleLabel()
+            let loaded = runProcess("/bin/launchctl", ["list", label], allowFailure: true).status == 0
+            let definition = loadScheduleDefinition(from: plistURL)
+            print("Schedule installed: yes")
+            print("Schedule loaded: \(loaded ? "yes" : "no")")
+            if let definition {
+                print("time: \(String(format: "%02d:%02d", definition.hour, definition.minute)) daily")
+                print("command: notes-matrix \(definition.exportArgs.joined(separator: " "))")
+            }
+            print("agent: \(plistURL.path)")
+        case "run-now":
+            let plistURL = schedulePlistURL()
+            guard let definition = loadScheduleDefinition(from: plistURL) else {
+                print("Schedule is not installed. Run: notes-matrix schedule install --daily 09:00 --output /path")
+                return
+            }
+            print("Running scheduled export now...")
+            try runNonInteractive(args: definition.exportArgs)
+        case "remove":
+            let plistURL = schedulePlistURL()
+            _ = runProcess("/bin/launchctl", ["unload", plistURL.path], allowFailure: true)
+            if FileManager.default.fileExists(atPath: plistURL.path) {
+                try FileManager.default.removeItem(at: plistURL)
+                print("Schedule removed.")
+            } else {
+                print("Schedule was not installed.")
+            }
+        default:
+            throw ScheduleError.invalidCommand
+        }
+    }
+
+    static func parseDailyTime(_ value: String) throws -> (Int, Int) {
+        let parts = value.split(separator: ":", omittingEmptySubsequences: false)
+        guard parts.count == 2,
+              let hour = Int(parts[0]),
+              let minute = Int(parts[1]),
+              (0...23).contains(hour),
+              (0...59).contains(minute) else {
+            throw ScheduleError.invalidTimeFormat(value)
+        }
+        return (hour, minute)
+    }
+
+    static func scheduleLabel() -> String {
+        "com.notesmatrix.export"
+    }
+
+    static func schedulePlistURL() -> URL {
+        URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
+            .appendingPathComponent("Library", isDirectory: true)
+            .appendingPathComponent("LaunchAgents", isDirectory: true)
+            .appendingPathComponent("\(scheduleLabel()).plist")
+    }
+
+    static func scheduleLogsDirURL() -> URL {
+        URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
+            .appendingPathComponent("Library", isDirectory: true)
+            .appendingPathComponent("Logs", isDirectory: true)
+            .appendingPathComponent("notes-matrix", isDirectory: true)
+    }
+
+    static func resolveExecutablePath() throws -> String {
+        let fm = FileManager.default
+        let arg0 = CommandLine.arguments.first ?? ""
+        let basePath: String
+        if arg0.hasPrefix("/") {
+            basePath = arg0
+        } else {
+            basePath = URL(fileURLWithPath: fm.currentDirectoryPath).appendingPathComponent(arg0).path
+        }
+        let resolved = URL(fileURLWithPath: basePath).standardizedFileURL.path
+        if fm.isExecutableFile(atPath: resolved) {
+            return resolved
+        }
+        if let bundlePath = Bundle.main.executablePath, fm.isExecutableFile(atPath: bundlePath) {
+            return bundlePath
+        }
+        throw ScheduleError.executablePathNotFound
+    }
+
+    static func renderSchedulePlist(
+        label: String,
+        executablePath: String,
+        exportArgs: [String],
+        hour: Int,
+        minute: Int,
+        stdoutPath: String,
+        stderrPath: String
+    ) -> String {
+        let argsXML = ([executablePath] + exportArgs)
+            .map { "      <string>\(xmlEscape($0))</string>" }
+            .joined(separator: "\n")
+
+        return """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+          <key>Label</key>
+          <string>\(xmlEscape(label))</string>
+          <key>ProgramArguments</key>
+          <array>
+          \(argsXML)
+          </array>
+          <key>StartCalendarInterval</key>
+          <dict>
+            <key>Hour</key>
+            <integer>\(hour)</integer>
+            <key>Minute</key>
+            <integer>\(minute)</integer>
+          </dict>
+          <key>StandardOutPath</key>
+          <string>\(xmlEscape(stdoutPath))</string>
+          <key>StandardErrorPath</key>
+          <string>\(xmlEscape(stderrPath))</string>
+        </dict>
+        </plist>
+        """
+    }
+
+    static func xmlEscape(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+            .replacingOccurrences(of: "'", with: "&apos;")
+    }
+
+    static func runProcess(_ executable: String, _ arguments: [String], allowFailure: Bool) -> (status: Int32, out: String, err: String) {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: executable)
+        task.arguments = arguments
+        let out = Pipe()
+        let err = Pipe()
+        task.standardOutput = out
+        task.standardError = err
+        do {
+            try task.run()
+            task.waitUntilExit()
+        } catch {
+            if allowFailure {
+                return (1, "", String(describing: error))
+            }
+            return (1, "", String(describing: error))
+        }
+        let stdout = String(decoding: out.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        let stderr = String(decoding: err.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        return (task.terminationStatus, stdout.trimmingCharacters(in: .whitespacesAndNewlines), stderr.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    static func loadScheduleDefinition(from plistURL: URL) -> ScheduleDefinition? {
+        guard let data = try? Data(contentsOf: plistURL) else { return nil }
+        guard let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else { return nil }
+        guard let args = plist["ProgramArguments"] as? [String], args.count >= 2 else { return nil }
+        guard let interval = plist["StartCalendarInterval"] as? [String: Any] else { return nil }
+        guard let hour = interval["Hour"] as? Int, let minute = interval["Minute"] as? Int else { return nil }
+        return ScheduleDefinition(hour: hour, minute: minute, exportArgs: Array(args.dropFirst()))
     }
 
     struct ManifestEntry: Codable {

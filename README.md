@@ -125,6 +125,40 @@ brew tap PaladinXL/notes-matrix
 brew upgrade notes-matrix
 ```
 
+## Schedule (launchd)
+
+You can run background daily exports via macOS `launchd`.
+
+Install daily schedule (example: 09:00):
+
+```bash
+notes-matrix schedule install --daily 09:00 --output ~/Desktop/NotesExport --incremental
+```
+
+Check schedule status:
+
+```bash
+notes-matrix schedule status
+```
+
+Run scheduled job immediately:
+
+```bash
+notes-matrix schedule run-now
+```
+
+Remove schedule:
+
+```bash
+notes-matrix schedule remove
+```
+
+Notes:
+
+- schedule file: `~/Library/LaunchAgents/com.notesmatrix.export.plist`
+- logs: `~/Library/Logs/notes-matrix/`
+- recommended: install schedule from Homebrew binary (`notes-matrix`), not from `swift run`
+
 ## Graphics in Markdown
 
 To maximize image transfer from Apple Notes into `.md`, use `deep` mode

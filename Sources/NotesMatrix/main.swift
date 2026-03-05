@@ -101,16 +101,8 @@ enum NotesMatrixCLI {
     }
 
     private static let dashboardActions: [String] = [
-        "Set Output Path",
-        "Select Export Mode (tree/zip)",
-        "Select Attachments Mode (fast/deep)",
-        "Select Existing Item Policy",
-        "Select Filename Mode (unicode/ascii)",
-        "Select Frontmatter (off/on)",
-        "Select Source HTML Snapshot (on/off)",
-        "Select Incremental Mode (off/on)",
         "Run Export",
-        "Schedule (background export)",
+        "Settings",
         "Help",
         "Exit"
     ]
@@ -118,63 +110,6 @@ enum NotesMatrixCLI {
     private static func runDashboardAction(index: Int, state: inout InteractiveState) throws -> Bool {
         switch index {
         case 0:
-            print(ANSI.paint("New output path >", ANSI.brightGreen), terminator: " ")
-            if let path = readLine()?.trimmingCharacters(in: .whitespacesAndNewlines), !path.isEmpty {
-                state.outputPath = path
-                state.lastRunMessage = "Output path updated"
-            }
-        case 1:
-            if let selected = promptSelectExportMode(current: state.mode) {
-                state.mode = selected
-                state.lastRunMessage = "Mode set to \(state.mode.rawValue)"
-            } else {
-                state.lastRunMessage = "Mode selection cancelled"
-            }
-        case 2:
-            if let selected = promptSelectAttachmentsMode(current: state.includeAttachments) {
-                state.includeAttachments = selected
-                state.lastRunMessage = state.includeAttachments
-                    ? "Attachments mode set to deep"
-                    : "Attachments mode set to fast"
-            } else {
-                state.lastRunMessage = "Attachments selection cancelled"
-            }
-        case 3:
-            if let selected = promptSelectExistingPolicy(current: state.existingPolicy) {
-                state.existingPolicy = selected
-                state.lastRunMessage = "Existing item policy: \(selected.rawValue)"
-            } else {
-                state.lastRunMessage = "Existing item policy selection cancelled"
-            }
-        case 4:
-            if let selected = promptSelectFilenameMode(current: state.filenameMode) {
-                state.filenameMode = selected
-                state.lastRunMessage = "Filename mode: \(selected.rawValue)"
-            } else {
-                state.lastRunMessage = "Filename mode selection cancelled"
-            }
-        case 5:
-            if let selected = promptSelectFrontmatterMode(current: state.includeFrontmatter) {
-                state.includeFrontmatter = selected
-                state.lastRunMessage = "Frontmatter: \(selected ? "on" : "off")"
-            } else {
-                state.lastRunMessage = "Frontmatter selection cancelled"
-            }
-        case 6:
-            if let selected = promptSelectSourceHTMLMode(current: state.includeSourceHTML) {
-                state.includeSourceHTML = selected
-                state.lastRunMessage = "Source HTML snapshot: \(selected ? "on" : "off")"
-            } else {
-                state.lastRunMessage = "Source HTML setting cancelled"
-            }
-        case 7:
-            if let selected = promptSelectIncrementalMode(current: state.incremental) {
-                state.incremental = selected
-                state.lastRunMessage = "Incremental mode: \(selected ? "on" : "off")"
-            } else {
-                state.lastRunMessage = "Incremental mode selection cancelled"
-            }
-        case 8:
             do {
                 try interactiveExport(
                     mode: state.mode,
@@ -192,16 +127,16 @@ enum NotesMatrixCLI {
                 state.lastRunMessage = "Export failed: \(error)"
                 pausePrompt()
             }
-        case 9:
+        case 1:
             do {
-                state.lastRunMessage = try runInteractiveSchedule(state: state)
+                state.lastRunMessage = try runInteractiveSettings(state: &state)
             } catch {
-                state.lastRunMessage = "Schedule failed: \(error)"
+                state.lastRunMessage = "Settings failed: \(error)"
                 pausePrompt()
             }
-        case 10:
+        case 2:
             printInteractiveHelp()
-        case 11:
+        case 3:
             print(ANSI.paint("Bye.", ANSI.dim))
             return true
         default:
@@ -468,11 +403,18 @@ enum NotesMatrixCLI {
         print(ANSI.paint("Tips: use 'fast' for daily export, 'deep' for full attachment pull.", ANSI.dim))
         print(ANSI.paint("maintainer (GitHub): @PaladinXL", ANSI.dim))
         print(ANSI.paint("version: v\(appVersion)", ANSI.dim))
-        print(ANSI.paint("Navigate: ↑/↓ move, Enter run selected, q exit. Fallback: w/s or action number (1-9).", ANSI.dim))
+        print(ANSI.paint("Navigate: ↑/↓ move, Enter run selected, q exit. Fallback: w/s or action number (1-4).", ANSI.dim))
     }
 
     static func printInteractiveHelp() {
         let lines: [String] = [
+            ANSI.paint("  Main menu:", ANSI.yellow),
+            ANSI.paint("  1) Run Export", ANSI.green),
+            ANSI.paint("  2) Settings", ANSI.green),
+            ANSI.paint("  3) Help", ANSI.green),
+            ANSI.paint("  4) Exit", ANSI.green),
+            "",
+            ANSI.paint("  Settings menu:", ANSI.yellow),
             ANSI.paint("  1) Set Output Path", ANSI.green),
             "     Directory where export output will be written.",
             "     Output is always created inside: <output>/notes-export",
@@ -515,14 +457,8 @@ enum NotesMatrixCLI {
             ANSI.paint("  10) Schedule (background export)", ANSI.green),
             "     Install/status/run-now/remove daily launchd automation.",
             "",
-            ANSI.paint("  11) Help", ANSI.green),
-            "     Opens this help screen.",
-            "",
-            ANSI.paint("  12) Exit", ANSI.green),
-            "     Exits the application.",
-            "",
             ANSI.paint("  Diagnostic:", ANSI.yellow) + " quick scan is available in CLI: `notes-matrix scan`",
-            ANSI.paint("  Schedule:", ANSI.yellow) + " use menu item 10 or CLI `notes-matrix schedule ...`",
+            ANSI.paint("  Schedule:", ANSI.yellow) + " use Settings menu item 10 or CLI `notes-matrix schedule ...`",
             ANSI.paint("  Tip:", ANSI.yellow) + " for regular backups, use fast + tree.",
             ANSI.paint("  Maintainer (GitHub):", ANSI.yellow) + " @PaladinXL",
             ANSI.paint("  Disclaimer:", ANSI.yellow) + " provided \"as is\"; use at your own risk and keep backups.",
@@ -647,6 +583,124 @@ enum NotesMatrixCLI {
             }
 
             pausePrompt()
+        }
+    }
+
+    static func runInteractiveSettings(state: inout InteractiveState) throws -> String {
+        let options = [
+            "Set Output Path",
+            "Select Export Mode (tree/zip)",
+            "Select Attachments Mode (fast/deep)",
+            "Select Existing Item Policy",
+            "Select Filename Mode (unicode/ascii)",
+            "Select Frontmatter (off/on)",
+            "Select Source HTML Snapshot (on/off)",
+            "Select Incremental Mode (off/on)",
+            "Run Export",
+            "Schedule (background export)"
+        ]
+        var initialIndex = 0
+        var lastMessage = "Settings menu closed"
+
+        while true {
+            guard let selected = promptArrowMenu(
+                title: "SETTINGS",
+                current: "export configuration",
+                options: options,
+                initialIndex: initialIndex
+            ) else {
+                return lastMessage
+            }
+            initialIndex = selected
+
+            switch selected {
+            case 0:
+                print(ANSI.paint("New output path >", ANSI.brightGreen), terminator: " ")
+                if let path = readLine()?.trimmingCharacters(in: .whitespacesAndNewlines), !path.isEmpty {
+                    state.outputPath = path
+                    lastMessage = "Output path updated"
+                } else {
+                    lastMessage = "Output path unchanged"
+                }
+            case 1:
+                if let selectedMode = promptSelectExportMode(current: state.mode) {
+                    state.mode = selectedMode
+                    lastMessage = "Mode set to \(state.mode.rawValue)"
+                } else {
+                    lastMessage = "Mode selection cancelled"
+                }
+            case 2:
+                if let selectedAttachments = promptSelectAttachmentsMode(current: state.includeAttachments) {
+                    state.includeAttachments = selectedAttachments
+                    lastMessage = state.includeAttachments
+                        ? "Attachments mode set to deep"
+                        : "Attachments mode set to fast"
+                } else {
+                    lastMessage = "Attachments selection cancelled"
+                }
+            case 3:
+                if let selectedPolicy = promptSelectExistingPolicy(current: state.existingPolicy) {
+                    state.existingPolicy = selectedPolicy
+                    lastMessage = "Existing item policy: \(selectedPolicy.rawValue)"
+                } else {
+                    lastMessage = "Existing item policy selection cancelled"
+                }
+            case 4:
+                if let selectedFilenameMode = promptSelectFilenameMode(current: state.filenameMode) {
+                    state.filenameMode = selectedFilenameMode
+                    lastMessage = "Filename mode: \(selectedFilenameMode.rawValue)"
+                } else {
+                    lastMessage = "Filename mode selection cancelled"
+                }
+            case 5:
+                if let selectedFrontmatter = promptSelectFrontmatterMode(current: state.includeFrontmatter) {
+                    state.includeFrontmatter = selectedFrontmatter
+                    lastMessage = "Frontmatter: \(selectedFrontmatter ? "on" : "off")"
+                } else {
+                    lastMessage = "Frontmatter selection cancelled"
+                }
+            case 6:
+                if let selectedSourceHTML = promptSelectSourceHTMLMode(current: state.includeSourceHTML) {
+                    state.includeSourceHTML = selectedSourceHTML
+                    lastMessage = "Source HTML snapshot: \(selectedSourceHTML ? "on" : "off")"
+                } else {
+                    lastMessage = "Source HTML setting cancelled"
+                }
+            case 7:
+                if let selectedIncremental = promptSelectIncrementalMode(current: state.incremental) {
+                    state.incremental = selectedIncremental
+                    lastMessage = "Incremental mode: \(selectedIncremental ? "on" : "off")"
+                } else {
+                    lastMessage = "Incremental mode selection cancelled"
+                }
+            case 8:
+                do {
+                    try interactiveExport(
+                        mode: state.mode,
+                        outputPath: state.outputPath,
+                        includeAttachments: state.includeAttachments,
+                        existingPolicy: state.existingPolicy,
+                        filenameMode: state.filenameMode,
+                        includeFrontmatter: state.includeFrontmatter,
+                        includeSourceHTML: state.includeSourceHTML,
+                        incremental: state.incremental
+                    )
+                    lastMessage = "Export completed"
+                    pausePrompt()
+                } catch {
+                    lastMessage = "Export failed: \(error)"
+                    pausePrompt()
+                }
+            case 9:
+                do {
+                    lastMessage = try runInteractiveSchedule(state: state)
+                } catch {
+                    lastMessage = "Schedule failed: \(error)"
+                    pausePrompt()
+                }
+            default:
+                return lastMessage
+            }
         }
     }
 
@@ -1006,19 +1060,23 @@ enum NotesMatrixCLI {
                 Show this help message.
 
             TUI operations:
-              1) Set Output Path
-              2) Select Export Mode (tree/zip)
-              3) Select Attachments Mode (fast/deep)
-              4) Select Existing Item Policy
-              5) Select Filename Mode (unicode/ascii)
-              6) Select Frontmatter (off/on)
-              7) Select Source HTML Snapshot (on/off)
-              8) Select Incremental Mode (off/on)
-              9) Run Export
-              10) Schedule (background export)
-              11) Help
-              12) Exit
-              Navigation: ↑/↓ move, Enter select, q exit. Number shortcuts support 1-9.
+              Main menu:
+                1) Run Export
+                2) Settings
+                3) Help
+                4) Exit
+              Settings menu:
+                Set Output Path
+                Select Export Mode (tree/zip)
+                Select Attachments Mode (fast/deep)
+                Select Existing Item Policy
+                Select Filename Mode (unicode/ascii)
+                Select Frontmatter (off/on)
+                Select Source HTML Snapshot (on/off)
+                Select Incremental Mode (off/on)
+                Run Export
+                Schedule (background export)
+              Navigation: ↑/↓ move, Enter select, q exit. Number shortcuts support 1-4 in main menu.
 
             Options (for export):
               --output <path>

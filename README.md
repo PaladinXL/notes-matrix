@@ -125,6 +125,18 @@ brew tap PaladinXL/notes-matrix
 brew upgrade notes-matrix
 ```
 
+If new version still does not apply (cache/tap mismatch):
+
+```bash
+brew update-reset
+brew untap paladinxl/notes-matrix
+brew tap paladinxl/notes-matrix
+brew fetch --force paladinxl/notes-matrix/notes-matrix
+brew reinstall --force paladinxl/notes-matrix/notes-matrix
+hash -r
+notes-matrix --version
+```
+
 ## Schedule (launchd)
 
 You can run background daily exports via macOS `launchd`.

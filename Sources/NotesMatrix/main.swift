@@ -443,7 +443,7 @@ enum NotesMatrixCLI {
         }
         print("")
         print(ANSI.paint("Tips: use 'fast' for daily export, 'deep' for full attachment pull.", ANSI.dim))
-        print(ANSI.paint("maintainer: @darthlogic", ANSI.dim))
+        print(ANSI.paint("maintainer (GitHub): @PaladinXL", ANSI.dim))
         print(ANSI.paint("Navigate: ↑/↓ move, Enter run selected, q exit. Fallback: w/s or action number (1-9).", ANSI.dim))
     }
 
@@ -497,7 +497,7 @@ enum NotesMatrixCLI {
         print(ANSI.paint("  Diagnostic:", ANSI.yellow) + " quick scan is available in CLI: `notes-matrix scan`")
         print(ANSI.paint("  Schedule:", ANSI.yellow) + " use menu item 9 or CLI `notes-matrix schedule ...`")
         print(ANSI.paint("  Tip:", ANSI.yellow) + " for regular backups, use fast + tree.")
-        print(ANSI.paint("  Maintainer:", ANSI.yellow) + " @darthlogic")
+        print(ANSI.paint("  Maintainer (GitHub):", ANSI.yellow) + " @PaladinXL")
         print(ANSI.paint("  Navigation:", ANSI.yellow) + " use ↑/↓ and Enter in selectors (q = cancel).")
     }
 

@@ -498,6 +498,7 @@ enum NotesMatrixCLI {
         print(ANSI.paint("  Schedule:", ANSI.yellow) + " use menu item 9 or CLI `notes-matrix schedule ...`")
         print(ANSI.paint("  Tip:", ANSI.yellow) + " for regular backups, use fast + tree.")
         print(ANSI.paint("  Maintainer (GitHub):", ANSI.yellow) + " @PaladinXL")
+        print(ANSI.paint("  Disclaimer:", ANSI.yellow) + " provided \"as is\"; use at your own risk and keep backups.")
         print(ANSI.paint("  Navigation:", ANSI.yellow) + " use ↑/↓ and Enter in selectors (q = cancel).")
     }
 
@@ -964,6 +965,7 @@ enum NotesMatrixCLI {
               - On first run macOS will ask Automation permission for Notes.
               - Export writes Markdown files and local assets.
               - Fast mode skips deep attachment extraction but keeps raw HTML snapshot.
+              - Provided "as is". Use at your own risk and keep backups.
             """
         )
     }

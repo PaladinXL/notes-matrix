@@ -289,6 +289,13 @@ See `CONTRIBUTING.md`.
 
 See `SECURITY.md`.
 
+## Disclaimer
+
+This software is provided "as is", without warranty of any kind, express or
+implied. The author is not liable for any damages, data loss, or other issues
+arising from its use. Use at your own risk and keep backups of your notes and
+attachments.
+
 ## License
 
 This project is licensed under the `Notes Matrix Non-Commercial License v1.0`

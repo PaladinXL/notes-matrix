@@ -98,6 +98,7 @@ enum NotesMatrixCLI {
         "Select Filename Mode (unicode/ascii)",
         "Select Incremental Mode (off/on)",
         "Run Export",
+        "Schedule (background export)",
         "Help",
         "Exit"
     ]
@@ -164,9 +165,17 @@ enum NotesMatrixCLI {
                 pausePrompt()
             }
         case 7:
+            do {
+                state.lastRunMessage = try runInteractiveSchedule(state: state)
+                pausePrompt()
+            } catch {
+                state.lastRunMessage = "Schedule failed: \(error)"
+                pausePrompt()
+            }
+        case 8:
             printInteractiveHelp()
             pausePrompt()
-        case 8:
+        case 9:
             print(ANSI.paint("Bye.", ANSI.dim))
             return true
         default:
@@ -386,7 +395,7 @@ enum NotesMatrixCLI {
         print("")
         print(ANSI.paint("Tips: use 'fast' for daily export, 'deep' for full attachment pull.", ANSI.dim))
         print(ANSI.paint("maintainer: @darthlogic", ANSI.dim))
-        print(ANSI.paint("Navigate: ↑/↓ move, Enter run selected, q exit. Fallback: w/s or action number.", ANSI.dim))
+        print(ANSI.paint("Navigate: ↑/↓ move, Enter run selected, q exit. Fallback: w/s or action number (1-9).", ANSI.dim))
     }
 
     static func printInteractiveHelp() {
@@ -423,16 +432,72 @@ enum NotesMatrixCLI {
         print(ANSI.paint("  7) Run Export", ANSI.green))
         print("     Runs export using current settings (path/mode/attachments).")
         print("")
-        print(ANSI.paint("  8) Help", ANSI.green))
+        print(ANSI.paint("  8) Schedule (background export)", ANSI.green))
+        print("     Install/status/run-now/remove daily launchd automation.")
+        print("")
+        print(ANSI.paint("  9) Help", ANSI.green))
         print("     Opens this help screen.")
         print("")
-        print(ANSI.paint("  9) Exit", ANSI.green))
+        print(ANSI.paint("  10) Exit", ANSI.green))
         print("     Exits the application.")
         print("")
         print(ANSI.paint("  Diagnostic:", ANSI.yellow) + " quick scan is available in CLI: `notes-matrix scan`")
+        print(ANSI.paint("  Schedule:", ANSI.yellow) + " use menu item 8 or CLI `notes-matrix schedule ...`")
         print(ANSI.paint("  Tip:", ANSI.yellow) + " for regular backups, use fast + tree.")
         print(ANSI.paint("  Maintainer:", ANSI.yellow) + " @darthlogic")
         print(ANSI.paint("  Navigation:", ANSI.yellow) + " use ↑/↓ and Enter in selectors (q = cancel).")
+    }
+
+    static func runInteractiveSchedule(state: InteractiveState) throws -> String {
+        let options = [
+            "Install daily schedule",
+            "Schedule status",
+            "Run scheduled job now",
+            "Remove schedule"
+        ]
+        guard let selected = promptArrowMenu(
+            title: "SCHEDULE",
+            current: "launchd background export",
+            options: options,
+            initialIndex: 0
+        ) else {
+            return "Schedule menu cancelled"
+        }
+
+        switch selected {
+        case 0:
+            print(ANSI.paint("Daily time HH:MM (default 09:00) >", ANSI.brightGreen), terminator: " ")
+            let daily = readLine()?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let selectedTime = (daily?.isEmpty == false) ? daily! : "09:00"
+
+            print(ANSI.paint("Output path (default current output) >", ANSI.brightGreen), terminator: " ")
+            let outputInput = readLine()?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let outputPath = (outputInput?.isEmpty == false) ? outputInput! : state.outputPath
+
+            var args = [
+                "install",
+                "--daily", selectedTime,
+                "--output", outputPath,
+                "--on-existing", state.existingPolicy.rawValue,
+                "--filename-mode", state.filenameMode.rawValue
+            ]
+            if state.mode == .zip { args.append("--zip") }
+            if state.includeAttachments { args.append("--with-attachments") }
+            if state.incremental { args.append("--incremental") }
+            try runSchedule(args: args)
+            return "Schedule installed (\(selectedTime))"
+        case 1:
+            try runSchedule(args: ["status"])
+            return "Schedule status shown"
+        case 2:
+            try runSchedule(args: ["run-now"])
+            return "Scheduled run started"
+        case 3:
+            try runSchedule(args: ["remove"])
+            return "Schedule removed"
+        default:
+            return "Schedule menu cancelled"
+        }
     }
 
     static func promptSelectExportMode(current: ExportMode) -> ExportMode? {
@@ -591,7 +656,7 @@ enum NotesMatrixCLI {
             print("\r" + ANSI.paint("Mode >", ANSI.brightGreen), terminator: " ")
             let input = readLine()?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
             if input.isEmpty { return selected }
-            if input == "q" || input == "quit" || input == "cancel" || input == "b" || input == "back" || input == "0" { return nil }
+            if input == "q" || input == "й" || input == "quit" || input == "cancel" || input == "b" || input == "back" || input == "0" { return nil }
             if let nav = parseLineNavigation(input), nav != 0 {
                 if nav < 0 {
                     for _ in 0..<abs(nav) { selected = (selected - 1 + options.count) % options.count }
@@ -639,6 +704,13 @@ enum NotesMatrixCLI {
         if ch == 3 { return .quit } // Ctrl+C
         if ch == 113 || ch == 81 { return .cancel } // q / Q
         if ch == 98 || ch == 66 { return .cancel } // b / B
+        if ch == 208 {
+            var next: UInt8 = 0
+            if withNonCanonicalInput({ read(STDIN_FILENO, &next, 1) }) == 1 {
+                if next == 185 || next == 153 { return .cancel } // й / Й
+            }
+            return .other
+        }
         if ch == 119 || ch == 107 || ch == 87 || ch == 75 { return .up }   // w/k
         if ch == 115 || ch == 106 || ch == 83 || ch == 74 { return .down } // s/j
         if ch >= 48 && ch <= 57 { return .digit(Int(ch - 48)) }             // 0...9
@@ -678,6 +750,13 @@ enum NotesMatrixCLI {
         if ch == 10 || ch == 13 { return .enter }
         if ch == 3 { return .quit } // Ctrl+C
         if ch == 113 || ch == 81 { return .quit } // q / Q
+        if ch == 208 {
+            var next: UInt8 = 0
+            if withNonCanonicalInput({ read(STDIN_FILENO, &next, 1) }) == 1 {
+                if next == 185 || next == 153 { return .quit } // й / Й
+            }
+            return .other
+        }
         if ch == 119 || ch == 107 || ch == 87 || ch == 75 { return .up }   // w/k
         if ch == 115 || ch == 106 || ch == 83 || ch == 74 { return .down } // s/j
         if ch >= 49 && ch <= 57 { return .digit(Int(ch - 48)) }             // 1...9
@@ -740,9 +819,10 @@ enum NotesMatrixCLI {
               5) Select Filename Mode (unicode/ascii)
               6) Select Incremental Mode (off/on)
               7) Run Export
-              8) Help
-              9) Exit
-              Navigation: ↑/↓ move, Enter select, q exit.
+              8) Schedule (background export)
+              9) Help
+              10) Exit
+              Navigation: ↑/↓ move, Enter select, q exit. Number shortcuts support 1-9.
 
             Options (for export):
               --output <path>

@@ -780,7 +780,18 @@ enum NotesMatrixCLI {
     static func pausePrompt() {
         print("")
         print(ANSI.paint("Press Enter to continue...", ANSI.dim), terminator: "")
-        _ = readLine()
+        guard isatty(STDIN_FILENO) == 1 else {
+            _ = readLine()
+            return
+        }
+
+        while true {
+            var ch: UInt8 = 0
+            let n = withNonCanonicalInput { read(STDIN_FILENO, &ch, 1) }
+            if n != 1 { break }
+            if ch == 10 || ch == 13 { break } // Enter
+        }
+        print("")
     }
 
     static func printHelp() {

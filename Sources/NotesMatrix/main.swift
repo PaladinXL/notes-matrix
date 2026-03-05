@@ -188,7 +188,6 @@ enum NotesMatrixCLI {
             }
         case 9:
             printInteractiveHelp()
-            pausePrompt()
         case 10:
             print(ANSI.paint("Bye.", ANSI.dim))
             return true
@@ -448,58 +447,116 @@ enum NotesMatrixCLI {
     }
 
     static func printInteractiveHelp() {
-        print("")
-        print(ANSI.paint("HELP", ANSI.cyan))
-        print(ANSI.paint("  1) Set Output Path", ANSI.green))
-        print("     Directory where export output will be written.")
-        print("     Output is always created inside: <output>/notes-export")
-        print("")
-        print(ANSI.paint("  2) Select Export Mode (tree/zip)", ANSI.green))
-        print("     Opens a selector for export format:")
-        print("     - tree: standard folder tree with .md files")
-        print("     - zip: same structure, also packed into notes-export.zip")
-        print("")
-        print(ANSI.paint("  3) Select Attachments Mode (fast/deep)", ANSI.green))
-        print("     - fast (recommended): faster, keeps .source.html as reliable fallback")
-        print("     - deep: attempts full binary attachment/graphics extraction (slower)")
-        print("")
-        print(ANSI.paint("  4) Select Existing Item Policy", ANSI.green))
-        print("     Controls behavior when target file/folder already exists:")
-        print("     - overwrite: replace/reuse existing targets (default)")
-        print("     - skip: do nothing for conflicting targets")
-        print("     - uniquify: create new names with suffix (-1, -2, ...)")
-        print("")
-        print(ANSI.paint("  5) Select Filename Mode (unicode/ascii)", ANSI.green))
-        print("     Controls cross-platform filename behavior:")
-        print("     - unicode: keep Cyrillic/Unicode names, sanitize safely")
-        print("     - ascii: transliterate names to ASCII for max Windows portability")
-        print("")
-        print(ANSI.paint("  6) Select Frontmatter (off/on)", ANSI.green))
-        print("     - off (default): export note content only")
-        print("     - on: add YAML metadata block at top of each .md file")
-        print("")
-        print(ANSI.paint("  7) Select Incremental Mode (off/on)", ANSI.green))
-        print("     - off (default): read and export all notes")
-        print("     - on: compare with manifest and export only changed notes")
-        print("")
-        print(ANSI.paint("  8) Run Export", ANSI.green))
-        print("     Runs export using current settings (path/mode/attachments).")
-        print("")
-        print(ANSI.paint("  9) Schedule (background export)", ANSI.green))
-        print("     Install/status/run-now/remove daily launchd automation.")
-        print("")
-        print(ANSI.paint("  10) Help", ANSI.green))
-        print("     Opens this help screen.")
-        print("")
-        print(ANSI.paint("  11) Exit", ANSI.green))
-        print("     Exits the application.")
-        print("")
-        print(ANSI.paint("  Diagnostic:", ANSI.yellow) + " quick scan is available in CLI: `notes-matrix scan`")
-        print(ANSI.paint("  Schedule:", ANSI.yellow) + " use menu item 9 or CLI `notes-matrix schedule ...`")
-        print(ANSI.paint("  Tip:", ANSI.yellow) + " for regular backups, use fast + tree.")
-        print(ANSI.paint("  Maintainer (GitHub):", ANSI.yellow) + " @PaladinXL")
-        print(ANSI.paint("  Disclaimer:", ANSI.yellow) + " provided \"as is\"; use at your own risk and keep backups.")
-        print(ANSI.paint("  Navigation:", ANSI.yellow) + " use ↑/↓ and Enter in selectors (q = cancel).")
+        let lines: [String] = [
+            ANSI.paint("  1) Set Output Path", ANSI.green),
+            "     Directory where export output will be written.",
+            "     Output is always created inside: <output>/notes-export",
+            "",
+            ANSI.paint("  2) Select Export Mode (tree/zip)", ANSI.green),
+            "     Opens a selector for export format:",
+            "     - tree: standard folder tree with .md files",
+            "     - zip: same structure, also packed into notes-export.zip",
+            "",
+            ANSI.paint("  3) Select Attachments Mode (fast/deep)", ANSI.green),
+            "     - fast (recommended): faster, keeps .source.html as reliable fallback",
+            "     - deep: attempts full binary attachment/graphics extraction (slower)",
+            "",
+            ANSI.paint("  4) Select Existing Item Policy", ANSI.green),
+            "     Controls behavior when target file/folder already exists:",
+            "     - overwrite: replace/reuse existing targets (default)",
+            "     - skip: do nothing for conflicting targets",
+            "     - uniquify: create new names with suffix (-1, -2, ...)",
+            "",
+            ANSI.paint("  5) Select Filename Mode (unicode/ascii)", ANSI.green),
+            "     Controls cross-platform filename behavior:",
+            "     - unicode: keep Cyrillic/Unicode names, sanitize safely",
+            "     - ascii: transliterate names to ASCII for max Windows portability",
+            "",
+            ANSI.paint("  6) Select Frontmatter (off/on)", ANSI.green),
+            "     - off (default): export note content only",
+            "     - on: add YAML metadata block at top of each .md file",
+            "",
+            ANSI.paint("  7) Select Incremental Mode (off/on)", ANSI.green),
+            "     - off (default): read and export all notes",
+            "     - on: compare with manifest and export only changed notes",
+            "",
+            ANSI.paint("  8) Run Export", ANSI.green),
+            "     Runs export using current settings (path/mode/attachments).",
+            "",
+            ANSI.paint("  9) Schedule (background export)", ANSI.green),
+            "     Install/status/run-now/remove daily launchd automation.",
+            "",
+            ANSI.paint("  10) Help", ANSI.green),
+            "     Opens this help screen.",
+            "",
+            ANSI.paint("  11) Exit", ANSI.green),
+            "     Exits the application.",
+            "",
+            ANSI.paint("  Diagnostic:", ANSI.yellow) + " quick scan is available in CLI: `notes-matrix scan`",
+            ANSI.paint("  Schedule:", ANSI.yellow) + " use menu item 9 or CLI `notes-matrix schedule ...`",
+            ANSI.paint("  Tip:", ANSI.yellow) + " for regular backups, use fast + tree.",
+            ANSI.paint("  Maintainer (GitHub):", ANSI.yellow) + " @PaladinXL",
+            ANSI.paint("  Disclaimer:", ANSI.yellow) + " provided \"as is\"; use at your own risk and keep backups.",
+            ANSI.paint("  Navigation:", ANSI.yellow) + " use ↑/↓ and Enter in selectors (q = cancel)."
+        ]
+        paginateHelp(lines: lines, title: "HELP")
+    }
+
+    private static func paginateHelp(lines: [String], title: String) {
+        if !supportsAnsiTerminal() {
+            print("")
+            print(ANSI.paint(title, ANSI.cyan))
+            for line in lines { print(line) }
+            pausePrompt()
+            return
+        }
+
+        let rows = terminalRows()
+        let pageSize = max(8, rows - 9)
+        var start = 0
+
+        while true {
+            clearScreen()
+            printMatrixHeader()
+            print("")
+            print(ANSI.paint(title, ANSI.cyan))
+            print("")
+
+            let end = min(start + pageSize, lines.count)
+            for idx in start..<end {
+                print(lines[idx])
+            }
+            print("")
+            let page = (start / pageSize) + 1
+            let pages = max(1, Int(ceil(Double(max(1, lines.count)) / Double(pageSize))))
+            print(ANSI.paint("Page \(page)/\(pages)  Enter/↓ next, ↑ previous, q exit", ANSI.dim))
+
+            switch readMenuKey() {
+            case .enter, .down, .right:
+                if end >= lines.count { return }
+                start = end
+            case .up, .left:
+                if start == 0 { continue }
+                start = max(0, start - pageSize)
+            case .quit, .cancel:
+                return
+            case .digit(let n):
+                if n == 0 { return }
+                continue
+            case .other:
+                continue
+            }
+        }
+    }
+
+    private static func terminalRows() -> Int {
+        guard isatty(STDOUT_FILENO) == 1 else { return 24 }
+        var size = winsize()
+        let rc = ioctl(STDOUT_FILENO, TIOCGWINSZ, &size)
+        if rc == 0, size.ws_row > 0 {
+            return Int(size.ws_row)
+        }
+        return 24
     }
 
     static func runInteractiveSchedule(state: InteractiveState) throws -> String {

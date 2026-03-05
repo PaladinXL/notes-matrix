@@ -13,6 +13,12 @@ From this repository:
 ./scripts/release-macos.sh v0.1.0
 ```
 
+Or run full automated flow (build + GitHub release + tap update):
+
+```bash
+make release VERSION=v0.1.0
+```
+
 This creates:
 
 - `dist/notes-matrix-v0.1.0-macos-<arch>.tar.gz`
@@ -54,4 +60,3 @@ Users then run:
 brew update
 brew upgrade notes-matrix
 ```
-

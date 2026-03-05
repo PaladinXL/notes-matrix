@@ -265,6 +265,13 @@ For full step-by-step release and protection settings:
 
 - `docs/GITHUB_SETUP.md`
 - `docs/HOMEBREW.md`
+- `docs/RELEASING.md`
+
+Automated release (build + GitHub release + Homebrew tap update):
+
+```bash
+make release VERSION=v0.1.0
+```
 
 ## Limitations
 

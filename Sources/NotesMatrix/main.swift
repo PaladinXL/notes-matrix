@@ -2,6 +2,8 @@ import Foundation
 import Darwin
 
 enum NotesMatrixCLI {
+    static let appVersion = "0.1.9"
+
     enum ScheduleError: Error, CustomStringConvertible {
         case invalidCommand
         case invalidTimeFormat(String)
@@ -386,6 +388,8 @@ enum NotesMatrixCLI {
             }
         case "schedule":
             try runSchedule(args: Array(args.dropFirst()))
+        case "version", "--version":
+            print("notes-matrix v\(appVersion)")
         case "help", "--help", "-h":
             printHelp()
         default:
@@ -443,6 +447,7 @@ enum NotesMatrixCLI {
         print("")
         print(ANSI.paint("Tips: use 'fast' for daily export, 'deep' for full attachment pull.", ANSI.dim))
         print(ANSI.paint("maintainer (GitHub): @PaladinXL", ANSI.dim))
+        print(ANSI.paint("version: v\(appVersion)", ANSI.dim))
         print(ANSI.paint("Navigate: ↑/↓ move, Enter run selected, q exit. Fallback: w/s or action number (1-9).", ANSI.dim))
     }
 
@@ -934,11 +939,12 @@ enum NotesMatrixCLI {
     static func printHelp() {
         print(
             """
-            notes-matrix - Apple Notes exporter
+            notes-matrix - Apple Notes exporter (v\(appVersion))
 
             Usage:
               notes-matrix                  # interactive matrix-like TUI
               notes-matrix scan
+              notes-matrix version
               notes-matrix help
               notes-matrix export --output /path/to/dir [--zip] [--with-attachments] [--on-existing overwrite|skip|uniquify] [--filename-mode unicode|ascii] [--with-frontmatter] [--incremental] [--verbose]
               notes-matrix schedule install --daily HH:MM [--output /path] [--zip] [--with-attachments] [--on-existing overwrite|skip|uniquify] [--filename-mode unicode|ascii] [--with-frontmatter] [--incremental] [--verbose]
@@ -955,6 +961,9 @@ enum NotesMatrixCLI {
 
               schedule
                 Manage daily background export via launchd.
+
+              version
+                Show current app version.
 
               help
                 Show this help message.

@@ -2,7 +2,7 @@ import Foundation
 import Darwin
 
 enum NotesMatrixCLI {
-    static let appVersion = "0.1.9"
+    static let appVersion = "0.1.10"
 
     enum ScheduleError: Error, CustomStringConvertible {
         case invalidCommand
@@ -37,6 +37,7 @@ enum NotesMatrixCLI {
         var existingPolicy: ExistingItemPolicy
         var filenameMode: FilenameMode
         var includeFrontmatter: Bool
+        var includeSourceHTML: Bool
         var incremental: Bool
         var lastScanCount: Int?
         var lastRunMessage: String?
@@ -66,6 +67,7 @@ enum NotesMatrixCLI {
             existingPolicy: .overwrite,
             filenameMode: .unicodeSafe,
             includeFrontmatter: false,
+            includeSourceHTML: true,
             incremental: false,
             lastScanCount: nil,
             lastRunMessage: nil
@@ -105,6 +107,7 @@ enum NotesMatrixCLI {
         "Select Existing Item Policy",
         "Select Filename Mode (unicode/ascii)",
         "Select Frontmatter (off/on)",
+        "Select Source HTML Snapshot (on/off)",
         "Select Incremental Mode (off/on)",
         "Run Export",
         "Schedule (background export)",
@@ -158,13 +161,20 @@ enum NotesMatrixCLI {
                 state.lastRunMessage = "Frontmatter selection cancelled"
             }
         case 6:
+            if let selected = promptSelectSourceHTMLMode(current: state.includeSourceHTML) {
+                state.includeSourceHTML = selected
+                state.lastRunMessage = "Source HTML snapshot: \(selected ? "on" : "off")"
+            } else {
+                state.lastRunMessage = "Source HTML setting cancelled"
+            }
+        case 7:
             if let selected = promptSelectIncrementalMode(current: state.incremental) {
                 state.incremental = selected
                 state.lastRunMessage = "Incremental mode: \(selected ? "on" : "off")"
             } else {
                 state.lastRunMessage = "Incremental mode selection cancelled"
             }
-        case 7:
+        case 8:
             do {
                 try interactiveExport(
                     mode: state.mode,
@@ -173,6 +183,7 @@ enum NotesMatrixCLI {
                     existingPolicy: state.existingPolicy,
                     filenameMode: state.filenameMode,
                     includeFrontmatter: state.includeFrontmatter,
+                    includeSourceHTML: state.includeSourceHTML,
                     incremental: state.incremental
                 )
                 state.lastRunMessage = "Export completed"
@@ -181,16 +192,16 @@ enum NotesMatrixCLI {
                 state.lastRunMessage = "Export failed: \(error)"
                 pausePrompt()
             }
-        case 8:
+        case 9:
             do {
                 state.lastRunMessage = try runInteractiveSchedule(state: state)
             } catch {
                 state.lastRunMessage = "Schedule failed: \(error)"
                 pausePrompt()
             }
-        case 9:
-            printInteractiveHelp()
         case 10:
+            printInteractiveHelp()
+        case 11:
             print(ANSI.paint("Bye.", ANSI.dim))
             return true
         default:
@@ -219,6 +230,7 @@ enum NotesMatrixCLI {
         existingPolicy: ExistingItemPolicy,
         filenameMode: FilenameMode,
         includeFrontmatter: Bool,
+        includeSourceHTML: Bool,
         incremental: Bool
     ) throws {
         let overallStarted = Date()
@@ -243,6 +255,7 @@ enum NotesMatrixCLI {
                 includeAttachments: includeAttachments,
                 filenameMode: filenameMode,
                 includeFrontmatter: includeFrontmatter,
+                includeSourceHTML: includeSourceHTML,
                 mode: mode
             )
             let changedMetadata = changedNotes(metadata: metadata, manifest: previousManifest, context: context)
@@ -272,7 +285,8 @@ enum NotesMatrixCLI {
             mode: mode,
             existingPolicy: existingPolicy,
             filenameMode: filenameMode,
-            includeFrontmatter: includeFrontmatter
+            includeFrontmatter: includeFrontmatter,
+            includeSourceHTML: includeSourceHTML
         )
         let totalElapsed = String(format: "%.2f", Date().timeIntervalSince(overallStarted))
         print("")
@@ -285,6 +299,7 @@ enum NotesMatrixCLI {
                 includeAttachments: includeAttachments,
                 filenameMode: filenameMode,
                 includeFrontmatter: includeFrontmatter,
+                includeSourceHTML: includeSourceHTML,
                 mode: mode
             )
             saveManifest(from: metadataForManifest ?? [], context: context, to: manifestURL)
@@ -309,6 +324,7 @@ enum NotesMatrixCLI {
             let zipEnabled = args.contains("--zip")
             let includeAttachments = args.contains("--with-attachments")
             let includeFrontmatter = args.contains("--with-frontmatter")
+            let includeSourceHTML = !args.contains("--no-source-html")
             let incremental = args.contains("--incremental")
             let verbose = args.contains("--verbose")
             let existingPolicy = parseFlag("--on-existing", args: args).flatMap { ExistingItemPolicy(rawValue: $0) } ?? .overwrite
@@ -335,6 +351,7 @@ enum NotesMatrixCLI {
                     includeAttachments: includeAttachments,
                     filenameMode: filenameMode,
                     includeFrontmatter: includeFrontmatter,
+                    includeSourceHTML: includeSourceHTML,
                     mode: mode
                 )
                 let changedMetadata = changedNotes(metadata: metadata, manifest: previousManifest, context: context)
@@ -371,7 +388,8 @@ enum NotesMatrixCLI {
                 mode: mode,
                 existingPolicy: existingPolicy,
                 filenameMode: filenameMode,
-                includeFrontmatter: includeFrontmatter
+                includeFrontmatter: includeFrontmatter,
+                includeSourceHTML: includeSourceHTML
             )
             let totalElapsed = String(format: "%.2f", Date().timeIntervalSince(overallStarted))
             print("")
@@ -382,6 +400,7 @@ enum NotesMatrixCLI {
                     includeAttachments: includeAttachments,
                     filenameMode: filenameMode,
                     includeFrontmatter: includeFrontmatter,
+                    includeSourceHTML: includeSourceHTML,
                     mode: mode
                 )
                 saveManifest(from: metadataForManifest ?? [], context: context, to: manifestURL(for: URL(fileURLWithPath: output, isDirectory: true)))
@@ -437,6 +456,7 @@ enum NotesMatrixCLI {
         print("  existing targets: \(state.existingPolicy.rawValue) (\(state.existingPolicy.summary))")
         print("  filename mode: \(state.filenameMode.rawValue) (\(state.filenameMode.summary))")
         print("  frontmatter: \(state.includeFrontmatter ? "on (YAML metadata in .md)" : "off (content only, default)")")
+        print("  source HTML snapshot: \(state.includeSourceHTML ? "on (save *.source.html fallback)" : "off (markdown only)")")
         print("  incremental: \(state.incremental ? "on (changed notes only)" : "off (full export)")")
         if let count = state.lastScanCount {
             print("  last scan: \(count) notes")
@@ -481,24 +501,28 @@ enum NotesMatrixCLI {
             "     - off (default): export note content only",
             "     - on: add YAML metadata block at top of each .md file",
             "",
-            ANSI.paint("  7) Select Incremental Mode (off/on)", ANSI.green),
+            ANSI.paint("  7) Select Source HTML Snapshot (on/off)", ANSI.green),
+            "     - on (default): save <note>.source.html fallback",
+            "     - off: do not save HTML snapshots",
+            "",
+            ANSI.paint("  8) Select Incremental Mode (off/on)", ANSI.green),
             "     - off (default): read and export all notes",
             "     - on: compare with manifest and export only changed notes",
             "",
-            ANSI.paint("  8) Run Export", ANSI.green),
+            ANSI.paint("  9) Run Export", ANSI.green),
             "     Runs export using current settings (path/mode/attachments).",
             "",
-            ANSI.paint("  9) Schedule (background export)", ANSI.green),
+            ANSI.paint("  10) Schedule (background export)", ANSI.green),
             "     Install/status/run-now/remove daily launchd automation.",
             "",
-            ANSI.paint("  10) Help", ANSI.green),
+            ANSI.paint("  11) Help", ANSI.green),
             "     Opens this help screen.",
             "",
-            ANSI.paint("  11) Exit", ANSI.green),
+            ANSI.paint("  12) Exit", ANSI.green),
             "     Exits the application.",
             "",
             ANSI.paint("  Diagnostic:", ANSI.yellow) + " quick scan is available in CLI: `notes-matrix scan`",
-            ANSI.paint("  Schedule:", ANSI.yellow) + " use menu item 9 or CLI `notes-matrix schedule ...`",
+            ANSI.paint("  Schedule:", ANSI.yellow) + " use menu item 10 or CLI `notes-matrix schedule ...`",
             ANSI.paint("  Tip:", ANSI.yellow) + " for regular backups, use fast + tree.",
             ANSI.paint("  Maintainer (GitHub):", ANSI.yellow) + " @PaladinXL",
             ANSI.paint("  Disclaimer:", ANSI.yellow) + " provided \"as is\"; use at your own risk and keep backups.",
@@ -605,6 +629,7 @@ enum NotesMatrixCLI {
                 if state.mode == .zip { args.append("--zip") }
                 if state.includeAttachments { args.append("--with-attachments") }
                 if state.includeFrontmatter { args.append("--with-frontmatter") }
+                if !state.includeSourceHTML { args.append("--no-source-html") }
                 if state.incremental { args.append("--incremental") }
                 try runSchedule(args: args)
                 lastMessage = "Schedule installed (\(selectedTime))"
@@ -693,6 +718,18 @@ enum NotesMatrixCLI {
             initialIndex: currentIndex
         ) else { return nil }
         return selected == 1
+    }
+
+    static func promptSelectSourceHTMLMode(current: Bool) -> Bool? {
+        let options = ["on (save source.html fallback, default)", "off (do not save source.html)"]
+        let currentIndex = current ? 0 : 1
+        guard let selected = promptArrowMenu(
+            title: "SELECT SOURCE HTML SNAPSHOT",
+            current: current ? "on" : "off",
+            options: options,
+            initialIndex: currentIndex
+        ) else { return nil }
+        return selected == 0
     }
 
     static func promptSelectFrontmatterMode(current: Bool) -> Bool? {
@@ -946,8 +983,8 @@ enum NotesMatrixCLI {
               notes-matrix scan
               notes-matrix version
               notes-matrix help
-              notes-matrix export --output /path/to/dir [--zip] [--with-attachments] [--on-existing overwrite|skip|uniquify] [--filename-mode unicode|ascii] [--with-frontmatter] [--incremental] [--verbose]
-              notes-matrix schedule install --daily HH:MM [--output /path] [--zip] [--with-attachments] [--on-existing overwrite|skip|uniquify] [--filename-mode unicode|ascii] [--with-frontmatter] [--incremental] [--verbose]
+              notes-matrix export --output /path/to/dir [--zip] [--with-attachments] [--on-existing overwrite|skip|uniquify] [--filename-mode unicode|ascii] [--with-frontmatter] [--no-source-html] [--incremental] [--verbose]
+              notes-matrix schedule install --daily HH:MM [--output /path] [--zip] [--with-attachments] [--on-existing overwrite|skip|uniquify] [--filename-mode unicode|ascii] [--with-frontmatter] [--no-source-html] [--incremental] [--verbose]
               notes-matrix schedule status
               notes-matrix schedule run-now
               notes-matrix schedule remove
@@ -975,11 +1012,12 @@ enum NotesMatrixCLI {
               4) Select Existing Item Policy
               5) Select Filename Mode (unicode/ascii)
               6) Select Frontmatter (off/on)
-              7) Select Incremental Mode (off/on)
-              8) Run Export
-              9) Schedule (background export)
-              10) Help
-              11) Exit
+              7) Select Source HTML Snapshot (on/off)
+              8) Select Incremental Mode (off/on)
+              9) Run Export
+              10) Schedule (background export)
+              11) Help
+              12) Exit
               Navigation: ↑/↓ move, Enter select, q exit. Number shortcuts support 1-9.
 
             Options (for export):
@@ -1006,6 +1044,10 @@ enum NotesMatrixCLI {
                 Include YAML metadata block at top of each Markdown note.
                 By default frontmatter is disabled.
 
+              --no-source-html
+                Disable writing <note>.source.html fallback snapshots.
+                By default source HTML snapshots are enabled.
+
               --incremental
                 Export only changed notes using local manifest cache.
                 First run exports all notes.
@@ -1020,6 +1062,7 @@ enum NotesMatrixCLI {
               notes-matrix export --output ~/Desktop/NotesExport --with-attachments --on-existing skip
               notes-matrix export --output ~/Desktop/NotesExport --filename-mode ascii
               notes-matrix export --output ~/Desktop/NotesExport --with-frontmatter
+              notes-matrix export --output ~/Desktop/NotesExport --no-source-html
               notes-matrix export --output ~/Desktop/NotesExport --with-attachments --incremental
               notes-matrix export --output ~/Desktop/NotesExport --verbose
               notes-matrix schedule install --daily 09:00 --output ~/Desktop/NotesExport --incremental
@@ -1048,6 +1091,7 @@ enum NotesMatrixCLI {
             let output = parseFlag("--output", args: args) ?? NSHomeDirectory() + "/Desktop/NotesExport"
             let includeAttachments = args.contains("--with-attachments")
             let includeFrontmatter = args.contains("--with-frontmatter")
+            let includeSourceHTML = !args.contains("--no-source-html")
             let zipEnabled = args.contains("--zip")
             let incremental = args.contains("--incremental")
             let verbose = args.contains("--verbose")
@@ -1058,6 +1102,7 @@ enum NotesMatrixCLI {
             if zipEnabled { exportArgs.append("--zip") }
             if includeAttachments { exportArgs.append("--with-attachments") }
             if includeFrontmatter { exportArgs.append("--with-frontmatter") }
+            if !includeSourceHTML { exportArgs.append("--no-source-html") }
             if incremental { exportArgs.append("--incremental") }
             if verbose { exportArgs.append("--verbose") }
 
@@ -1271,6 +1316,7 @@ enum NotesMatrixCLI {
         let includeAttachments: Bool
         let filenameMode: FilenameMode
         let includeFrontmatter: Bool?
+        let includeSourceHTML: Bool?
         let mode: ExportMode
         let notes: [ManifestEntry]
     }
@@ -1279,6 +1325,7 @@ enum NotesMatrixCLI {
         let includeAttachments: Bool
         let filenameMode: FilenameMode
         let includeFrontmatter: Bool
+        let includeSourceHTML: Bool
         let mode: ExportMode
     }
 
@@ -1297,6 +1344,7 @@ enum NotesMatrixCLI {
             includeAttachments: context.includeAttachments,
             filenameMode: context.filenameMode,
             includeFrontmatter: context.includeFrontmatter,
+            includeSourceHTML: context.includeSourceHTML,
             mode: context.mode,
             notes: notes.map { note in
                 ManifestEntry(
@@ -1329,6 +1377,7 @@ enum NotesMatrixCLI {
               manifest.includeAttachments == context.includeAttachments,
               manifest.filenameMode == context.filenameMode,
               (manifest.includeFrontmatter ?? false) == context.includeFrontmatter,
+              (manifest.includeSourceHTML ?? true) == context.includeSourceHTML,
               manifest.mode == context.mode else {
             return metadata
         }

@@ -83,7 +83,8 @@ struct MarkdownExporter {
         mode: ExportMode,
         existingPolicy: ExistingItemPolicy = .overwrite,
         filenameMode: FilenameMode = .unicodeSafe,
-        includeFrontmatter: Bool = false
+        includeFrontmatter: Bool = false,
+        includeSourceHTML: Bool = true
     ) throws -> ExportResult {
         let exportRoot = root.appendingPathComponent("notes-export", isDirectory: true)
         try createDirectory(exportRoot)
@@ -135,7 +136,9 @@ struct MarkdownExporter {
             }
             let noteFileName = noteURL.deletingPathExtension().lastPathComponent
 
-            let htmlSnapshotSaved = writeSourceHTMLIfPresent(note: note, folder: folderURL, noteFileName: noteFileName, policy: existingPolicy)
+            let htmlSnapshotSaved = includeSourceHTML
+                ? writeSourceHTMLIfPresent(note: note, folder: folderURL, noteFileName: noteFileName, policy: existingPolicy)
+                : false
             let attachmentSummary = exportAttachments(
                 note: note,
                 baseFolder: folderURL,

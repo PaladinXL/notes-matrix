@@ -174,6 +174,31 @@ struct MarkdownExporterTests {
         #expect(!markdown.contains("assets_count:"))
     }
 
+    @Test
+    func sourceHtmlCanBeDisabled() throws {
+        let note = makeNote(
+            title: "No Source Snapshot",
+            bodyHTML: "<div>Hello</div>"
+        )
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("notes-matrix-tests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+
+        _ = try MarkdownExporter().export(
+            [note],
+            to: root,
+            mode: .folderTree,
+            existingPolicy: .overwrite,
+            filenameMode: .unicodeSafe,
+            includeFrontmatter: false,
+            includeSourceHTML: false
+        )
+
+        let exportRoot = root.appendingPathComponent("notes-export", isDirectory: true)
+        let mdFile = try findFirstFile(withExtension: "md", under: exportRoot)
+        let sourceURL = mdFile.deletingPathExtension().appendingPathExtension("source.html")
+        #expect(!FileManager.default.fileExists(atPath: sourceURL.path))
+    }
+
     private func makeNote(title: String, bodyHTML: String) -> ExportNote {
         ExportNote(
             id: UUID().uuidString,

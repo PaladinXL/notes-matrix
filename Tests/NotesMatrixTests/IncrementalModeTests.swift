@@ -10,6 +10,7 @@ struct IncrementalModeTests {
             includeAttachments: true,
             filenameMode: .unicodeSafe,
             includeFrontmatter: false,
+            includeSourceHTML: true,
             mode: .folderTree
         )
 
@@ -26,6 +27,7 @@ struct IncrementalModeTests {
             includeAttachments: true,
             filenameMode: .unicodeSafe,
             includeFrontmatter: false,
+            includeSourceHTML: true,
             mode: .folderTree,
             notes: [
                 NotesMatrixCLI.ManifestEntry(
@@ -41,6 +43,7 @@ struct IncrementalModeTests {
             includeAttachments: true,
             filenameMode: .unicodeSafe,
             includeFrontmatter: false,
+            includeSourceHTML: true,
             mode: .folderTree
         )
 
@@ -56,6 +59,7 @@ struct IncrementalModeTests {
             includeAttachments: false,
             filenameMode: .unicodeSafe,
             includeFrontmatter: false,
+            includeSourceHTML: true,
             mode: .folderTree,
             notes: [
                 NotesMatrixCLI.ManifestEntry(
@@ -71,6 +75,7 @@ struct IncrementalModeTests {
             includeAttachments: true,
             filenameMode: .unicodeSafe,
             includeFrontmatter: false,
+            includeSourceHTML: true,
             mode: .folderTree
         )
 

@@ -2,7 +2,7 @@ import Foundation
 import Darwin
 
 enum NotesMatrixCLI {
-    static let appVersion = "0.1.10"
+    static let appVersion = "0.1.12"
 
     enum ScheduleError: Error, CustomStringConvertible {
         case invalidCommand
@@ -451,14 +451,11 @@ enum NotesMatrixCLI {
             "     - off (default): read and export all notes",
             "     - on: compare with manifest and export only changed notes",
             "",
-            ANSI.paint("  9) Run Export", ANSI.green),
-            "     Runs export using current settings (path/mode/attachments).",
-            "",
-            ANSI.paint("  10) Schedule (background export)", ANSI.green),
+            ANSI.paint("  9) Schedule (background export)", ANSI.green),
             "     Install/status/run-now/remove daily launchd automation.",
             "",
             ANSI.paint("  Diagnostic:", ANSI.yellow) + " quick scan is available in CLI: `notes-matrix scan`",
-            ANSI.paint("  Schedule:", ANSI.yellow) + " use Settings menu item 10 or CLI `notes-matrix schedule ...`",
+            ANSI.paint("  Schedule:", ANSI.yellow) + " use Settings menu item 9 or CLI `notes-matrix schedule ...`",
             ANSI.paint("  Tip:", ANSI.yellow) + " for regular backups, use fast + tree.",
             ANSI.paint("  Maintainer (GitHub):", ANSI.yellow) + " @PaladinXL",
             ANSI.paint("  Disclaimer:", ANSI.yellow) + " provided \"as is\"; use at your own risk and keep backups.",
@@ -596,7 +593,6 @@ enum NotesMatrixCLI {
             "Select Frontmatter (off/on)",
             "Select Source HTML Snapshot (on/off)",
             "Select Incremental Mode (off/on)",
-            "Run Export",
             "Schedule (background export)"
         ]
         var initialIndex = 0
@@ -674,24 +670,6 @@ enum NotesMatrixCLI {
                     lastMessage = "Incremental mode selection cancelled"
                 }
             case 8:
-                do {
-                    try interactiveExport(
-                        mode: state.mode,
-                        outputPath: state.outputPath,
-                        includeAttachments: state.includeAttachments,
-                        existingPolicy: state.existingPolicy,
-                        filenameMode: state.filenameMode,
-                        includeFrontmatter: state.includeFrontmatter,
-                        includeSourceHTML: state.includeSourceHTML,
-                        incremental: state.incremental
-                    )
-                    lastMessage = "Export completed"
-                    pausePrompt()
-                } catch {
-                    lastMessage = "Export failed: \(error)"
-                    pausePrompt()
-                }
-            case 9:
                 do {
                     lastMessage = try runInteractiveSchedule(state: state)
                 } catch {
@@ -1074,7 +1052,6 @@ enum NotesMatrixCLI {
                 Select Frontmatter (off/on)
                 Select Source HTML Snapshot (on/off)
                 Select Incremental Mode (off/on)
-                Run Export
                 Schedule (background export)
               Navigation: ↑/↓ move, Enter select, q exit. Number shortcuts support 1-4 in main menu.
 

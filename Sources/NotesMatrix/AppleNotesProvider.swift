@@ -51,19 +51,31 @@ struct AppleNotesProvider {
 
     private let defaultChunkSize = 24
 
-    func loadNotes(mode: ReadMode = .fullExport, includeAttachments: Bool = false) throws -> [ExportNote] {
-        let notes = try loadMetadata()
+    func loadNotes(
+        mode: ReadMode = .fullExport,
+        includeAttachments: Bool = false,
+        verbose: Bool = false
+    ) throws -> [ExportNote] {
+        let notes = try loadMetadata(verbose: verbose)
         if notes.isEmpty { throw NotesProviderError.emptyResult }
         if mode == .scan { return notes }
-        return try loadNotesContent(from: notes, includeAttachments: includeAttachments)
+        return try loadNotesContent(from: notes, includeAttachments: includeAttachments, verbose: verbose)
     }
 
-    func loadNotesContent(from metadataNotes: [ExportNote], includeAttachments: Bool = false) throws -> [ExportNote] {
+    func loadNotesContent(
+        from metadataNotes: [ExportNote],
+        includeAttachments: Bool = false,
+        verbose: Bool = false
+    ) throws -> [ExportNote] {
         if metadataNotes.isEmpty { return [] }
-        return try loadNotesContentInternal(metadataNotes, includeAttachments: includeAttachments)
+        return try loadNotesContentInternal(metadataNotes, includeAttachments: includeAttachments, verbose: verbose)
     }
 
-    private func loadNotesContentInternal(_ metadataNotes: [ExportNote], includeAttachments: Bool) throws -> [ExportNote] {
+    private func loadNotesContentInternal(
+        _ metadataNotes: [ExportNote],
+        includeAttachments: Bool,
+        verbose: Bool
+    ) throws -> [ExportNote] {
         var notes = metadataNotes
         let cachedFolderMap = loadCachedFolderMap()
         let sourceIndices = notes.enumerated().map { idx, note in note.sourceIndex ?? idx }
@@ -73,13 +85,6 @@ struct AppleNotesProvider {
         }
 
         var status = InlineStatusRenderer(total: notes.count)
-        if status.enabled {
-            fputs("\(ANSI.brightGreen)Found \(notes.count) notes\(ANSI.reset)\n", stderr)
-            fputs("\(ANSI.cyan)Processing:\(ANSI.reset)\n", stderr)
-        } else {
-            fputs("Found \(notes.count) notes\n", stderr)
-            fputs("Processing...\n", stderr)
-        }
         var warnings = 0
         var cursor = 0
         var currentWaitSeconds = 0
@@ -132,7 +137,7 @@ struct AppleNotesProvider {
                         currentWaitSeconds = elapsed
                         if status.enabled {
                             status.render(waitSeconds: currentWaitSeconds, done: cursor)
-                        } else {
+                        } else if verbose {
                             fputs("Processing... \(elapsed)s elapsed\n", stderr)
                         }
                     }
@@ -194,7 +199,7 @@ struct AppleNotesProvider {
             if status.enabled {
                 status.render(waitSeconds: currentWaitSeconds, done: cursor)
             } else {
-                fputs("Progress: \(cursor)/\(notes.count)\n", stderr)
+                fputs("Reading content progress: \(cursor)/\(notes.count)\n", stderr)
             }
         }
 
@@ -208,7 +213,7 @@ struct AppleNotesProvider {
         return notes
     }
 
-    private func loadMetadata() throws -> [ExportNote] {
+    private func loadMetadata(verbose: Bool) throws -> [ExportNote] {
         let fullScript = #"""
         function safeDate(x) {
           try { return x ? x.toISOString() : null; } catch (_) { return null; }
@@ -408,10 +413,12 @@ struct AppleNotesProvider {
             if !decoded.isEmpty { return decoded }
 
             // Notes can briefly return an empty set right after wake-up/sync.
-            fputs("No notes returned yet. Retrying once...\n", stderr)
+            if verbose {
+                fputs("  Notes sync in progress, retrying...\n", stderr)
+            }
             Thread.sleep(forTimeInterval: 2.0)
 
-            var retrySpinner = InlineSpinnerRenderer(label: retryLabel)
+            var retrySpinner = InlineSpinnerRenderer(label: retryLabel, enabled: verbose)
             let retryOutput = try runOsaScript(
                 language: "JavaScript",
                 script: retryScript,
@@ -419,7 +426,7 @@ struct AppleNotesProvider {
                     onWait: { elapsed in
                         if retrySpinner.enabled {
                             retrySpinner.render(elapsed: elapsed)
-                        } else {
+                        } else if verbose {
                             fputs("\(retryLabel)... \(elapsed)s elapsed\n", stderr)
                         }
                     }
@@ -438,7 +445,10 @@ struct AppleNotesProvider {
             var lastError: Error?
 
             for attempt in 1...totalAttempts {
-                var spinner = InlineSpinnerRenderer(label: totalAttempts == 1 ? label : "\(label) [\(attempt)/\(totalAttempts)]")
+                var spinner = InlineSpinnerRenderer(
+                    label: totalAttempts == 1 ? label : "\(label) [\(attempt)/\(totalAttempts)]",
+                    enabled: verbose
+                )
                 do {
                     let output = try runOsaScript(
                         language: "JavaScript",
@@ -447,11 +457,11 @@ struct AppleNotesProvider {
                         onWait: { elapsed in
                             if spinner.enabled {
                                 spinner.render(elapsed: elapsed)
-                            } else {
-                                fputs("\(label)... \(elapsed)s elapsed\n", stderr)
-                            }
+                        } else if verbose {
+                            fputs("\(label)... \(elapsed)s elapsed\n", stderr)
                         }
-                    )
+                    }
+                )
                     if spinner.enabled { spinner.finish(success: true) }
                     return output
                 } catch {
@@ -465,7 +475,9 @@ struct AppleNotesProvider {
                         shouldRetry = false
                     }
                     if shouldRetry && attempt < totalAttempts {
-                        fputs("Temporary issue while \(label.lowercased()). Retrying...\n", stderr)
+                        if verbose {
+                            fputs("  Temporary issue, retrying...\n", stderr)
+                        }
                         Thread.sleep(forTimeInterval: 1.5)
                         continue
                     }
@@ -478,14 +490,14 @@ struct AppleNotesProvider {
         if hasCachedFolders {
             do {
                 let fastOutput = try runMetadataScriptWithRetry(
-                    label: "searching notes (quick scan)",
+                    label: "notes search (quick)",
                     script: fallbackScript,
                     timeoutSeconds: timeoutConfig.fallbackSeconds,
                     attempts: 2
                 )
                 let decodedFast = try decodeWithRetryIfEmpty(
                     fastOutput,
-                    retryLabel: "retrying notes search (quick scan)",
+                    retryLabel: "notes search (quick)",
                     retryScript: fallbackScript,
                     timeoutSeconds: timeoutConfig.fallbackSeconds
                 )
@@ -495,14 +507,16 @@ struct AppleNotesProvider {
                 saveMetadataFolderCache(decodedFast)
                 return decodedFast
             } catch {
-                fputs("Quick scan is unavailable. Switching to full scan...\n", stderr)
+                if verbose {
+                    fputs("  Quick scan unavailable, switching to full scan...\n", stderr)
+                }
             }
         }
 
         let output: String
         do {
             output = try runMetadataScriptWithRetry(
-                label: "searching notes (full scan)",
+                label: "notes search",
                 script: fullScript,
                 timeoutSeconds: timeoutConfig.fullScanSeconds,
                 attempts: 2
@@ -517,12 +531,14 @@ struct AppleNotesProvider {
             }
 
             guard shouldFallback else { throw error }
-            fputs("Compatibility fallback enabled. Folder mapping may be less precise.\n", stderr)
+            if verbose {
+                fputs("  Using compatibility scan (folder mapping may be less precise).\n", stderr)
+            }
 
             let fallbackOutput: String
             do {
                 fallbackOutput = try runMetadataScriptWithRetry(
-                    label: "searching notes (compatibility scan)",
+                    label: "notes search (compatibility)",
                     script: fallbackScript,
                     timeoutSeconds: timeoutConfig.fallbackSeconds,
                     attempts: 2
@@ -536,7 +552,7 @@ struct AppleNotesProvider {
             }
             let decodedFallback = try decodeWithRetryIfEmpty(
                 fallbackOutput,
-                retryLabel: "retrying notes search (compatibility scan)",
+                retryLabel: "notes search (compatibility)",
                 retryScript: fallbackScript,
                 timeoutSeconds: timeoutConfig.fallbackSeconds
             )
@@ -547,7 +563,7 @@ struct AppleNotesProvider {
         }
         let decoded = try decodeWithRetryIfEmpty(
             output,
-            retryLabel: "retrying notes search",
+            retryLabel: "notes search",
             retryScript: fallbackScript,
             timeoutSeconds: timeoutConfig.fallbackSeconds
         )
@@ -876,9 +892,9 @@ private struct InlineSpinnerRenderer {
     private var frameIndex: Int = 0
     private let frames = ["|", "/", "-", "\\"]
 
-    init(label: String) {
+    init(label: String, enabled: Bool = true) {
         self.label = label
-        self.enabled = isatty(STDERR_FILENO) == 1
+        self.enabled = enabled && isatty(STDERR_FILENO) == 1
     }
 
     mutating func render(elapsed: Int) {
@@ -894,7 +910,7 @@ private struct InlineSpinnerRenderer {
         guard enabled else { return }
         let mark = success ? "Done" : "Retrying"
         var line = success
-            ? "\(ANSI.brightGreen)\(mark):\(ANSI.reset) \(ANSI.dim)\(label)\(ANSI.reset)"
+            ? "  \(ANSI.brightGreen)\(mark):\(ANSI.reset) \(ANSI.dim)\(label)\(ANSI.reset)"
             : "\(ANSI.yellow)\(mark):\(ANSI.reset) \(ANSI.dim)\(label)\(ANSI.reset)"
         if let details, !details.isEmpty, !success {
             line += " \(ANSI.yellow)\(details)\(ANSI.reset)"
@@ -907,7 +923,6 @@ private struct InlineSpinnerRenderer {
 private struct InlineStatusRenderer {
     let total: Int
     let enabled: Bool
-    private var started: Bool = false
 
     init(total: Int) {
         self.total = max(0, total)
@@ -923,17 +938,9 @@ private struct InlineStatusRenderer {
         let filledBar = String(repeating: "█", count: filled)
         let emptyBar = String(repeating: "░", count: max(0, barWidth - filled))
         let bar = "\(ANSI.brightGreen)\(filledBar)\(ANSI.dim)\(emptyBar)\(ANSI.reset)"
-        let waitLine = "\(ANSI.green)Processing:\(ANSI.reset) \(ANSI.dim)reading note content (\(ANSI.brightGreen)\(max(0, waitSeconds))s\(ANSI.dim))\(ANSI.reset)"
-        let progressLine = "\(ANSI.brightGreen)Progress:\(ANSI.reset) [\(bar)] \(ANSI.brightGreen)\(percent)%\(ANSI.reset) \(ANSI.dim)(\(safeDone)/\(total))\(ANSI.reset)"
-
-        if !started {
-            fputs("\n\n", stderr)
-            started = true
-        }
-
-        fputs("\u{001B}[2A", stderr)
-        fputs("\r\u{001B}[2K\(waitLine)\n", stderr)
-        fputs("\r\u{001B}[2K\(progressLine)\n", stderr)
+        let progressLine = "  \(ANSI.brightGreen)Progress:\(ANSI.reset) [\(bar)] \(ANSI.brightGreen)\(percent)%\(ANSI.reset) \(ANSI.dim)(\(safeDone)/\(total))\(ANSI.reset)"
+        _ = waitSeconds
+        fputs("\r\u{001B}[2K\(progressLine)", stderr)
         fflush(stderr)
     }
 

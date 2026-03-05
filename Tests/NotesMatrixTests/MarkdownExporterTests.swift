@@ -99,6 +99,81 @@ struct MarkdownExporterTests {
         #expect(output.markdown.contains("%"))
     }
 
+    @Test
+    func mojibakeCyrillicFromWebIsRepairedInMarkdown() throws {
+        let broken = "РўРµРјС‹: +++ Cool\nРЎС‚РёРјРїР°РЅРє"
+        let note = makeNote(
+            title: "РўРµСЃС‚",
+            bodyHTML: "<div>\(broken)</div>"
+        )
+        let output = try exportSingle(note)
+
+        #expect(output.markdown.contains("Темы: +++ Cool"))
+        #expect(output.markdown.contains("Стимпанк"))
+    }
+
+    @Test
+    func mojibakeCyrillicIsRepairedInSourceHtmlSnapshot() throws {
+        let broken = "РўРµРјС‹: +++ Cool\nРЎС‚РёРјРїР°РЅРє"
+        let note = makeNote(
+            title: "РўРµСЃС‚ HTML",
+            bodyHTML: "<div>\(broken)</div>"
+        )
+        let output = try exportSingle(note)
+
+        #expect(output.sourceHTML?.contains("Темы: +++ Cool") == true)
+        #expect(output.sourceHTML?.contains("Стимпанк") == true)
+        #expect(output.sourceHTML?.lowercased().contains("charset=\"utf-8\"") == true)
+    }
+
+    @Test
+    func normalCyrillicTextStaysUnchanged() throws {
+        let normal = "Темы: +++ Cool\nСтимпанк\nКиберпанк"
+        let note = makeNote(
+            title: "Тест",
+            bodyHTML: "<div>\(normal)</div>"
+        )
+        let output = try exportSingle(note)
+
+        #expect(output.markdown.contains("Темы: +++ Cool"))
+        #expect(output.markdown.contains("Стимпанк"))
+        #expect(output.markdown.contains("Киберпанк"))
+        #expect(output.markdown.contains("title: \"Тест\""))
+    }
+
+    @Test
+    func asciiTextStaysUnchanged() throws {
+        let text = "Redo everything to supabase\nCoffee theme"
+        let note = makeNote(
+            title: "Plain ASCII",
+            bodyHTML: "<div>\(text)</div>"
+        )
+        let output = try exportSingle(note)
+
+        #expect(output.markdown.contains("Redo everything to supabase"))
+        #expect(output.markdown.contains("Coffee theme"))
+        #expect(output.markdown.contains("title: \"Plain ASCII\""))
+    }
+
+    @Test
+    func frontmatterIsDisabledByDefault() throws {
+        let note = makeNote(
+            title: "No Frontmatter",
+            bodyHTML: "<div>Hello</div>"
+        )
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("notes-matrix-tests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+
+        _ = try MarkdownExporter().export([note], to: root, mode: .folderTree, existingPolicy: .overwrite, filenameMode: .unicodeSafe)
+
+        let exportRoot = root.appendingPathComponent("notes-export", isDirectory: true)
+        let mdFile = try findFirstFile(withExtension: "md", under: exportRoot)
+        let markdown = try String(contentsOf: mdFile, encoding: .utf8)
+
+        #expect(!markdown.hasPrefix("---\n"))
+        #expect(!markdown.contains("assets_count:"))
+    }
+
     private func makeNote(title: String, bodyHTML: String) -> ExportNote {
         ExportNote(
             id: UUID().uuidString,
@@ -114,12 +189,19 @@ struct MarkdownExporterTests {
         )
     }
 
-    private func exportSingle(_ note: ExportNote) throws -> (markdown: String, assetFiles: [URL]) {
+    private func exportSingle(_ note: ExportNote) throws -> (markdown: String, assetFiles: [URL], sourceHTML: String?) {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("notes-matrix-tests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
 
         let exporter = MarkdownExporter()
-        _ = try exporter.export([note], to: root, mode: .folderTree, existingPolicy: .overwrite, filenameMode: .unicodeSafe)
+        _ = try exporter.export(
+            [note],
+            to: root,
+            mode: .folderTree,
+            existingPolicy: .overwrite,
+            filenameMode: .unicodeSafe,
+            includeFrontmatter: true
+        )
 
         let exportRoot = root.appendingPathComponent("notes-export", isDirectory: true)
         let mdFile = try findFirstFile(withExtension: "md", under: exportRoot)
@@ -136,7 +218,9 @@ struct MarkdownExporterTests {
             assetFiles = []
         }
 
-        return (markdown: markdown, assetFiles: assetFiles)
+        let sourceURL = mdFile.deletingPathExtension().appendingPathExtension("source.html")
+        let sourceHTML = try? String(contentsOf: sourceURL, encoding: .utf8)
+        return (markdown: markdown, assetFiles: assetFiles, sourceHTML: sourceHTML)
     }
 
     private func findFirstFile(withExtension ext: String, under root: URL) throws -> URL {

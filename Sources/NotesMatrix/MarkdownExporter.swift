@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 struct ExportResult {
     let notesCount: Int
@@ -25,6 +26,40 @@ enum ExportError: Error, CustomStringConvertible {
 struct MarkdownExporter {
     private let fileManager = FileManager.default
 
+    private struct SaveProgressRenderer {
+        let total: Int
+        let enabled: Bool
+        private var started: Bool = false
+
+        init(total: Int) {
+            self.total = max(0, total)
+            self.enabled = isatty(STDOUT_FILENO) == 1
+        }
+
+        mutating func render(done: Int) {
+            guard enabled else { return }
+            let safeDone = min(max(0, done), total)
+            let percent = total == 0 ? 0 : Int((Double(safeDone) / Double(total)) * 100.0)
+            let barWidth = 32
+            let filled = total == 0 ? 0 : Int((Double(safeDone) / Double(total)) * Double(barWidth))
+            let filledBar = String(repeating: "█", count: filled)
+            let emptyBar = String(repeating: "░", count: max(0, barWidth - filled))
+            let bar = "\(ANSI.brightGreen)\(filledBar)\(ANSI.dim)\(emptyBar)\(ANSI.reset)"
+            let progressLine = "  \(ANSI.brightGreen)Progress:\(ANSI.reset) [\(bar)] \(ANSI.brightGreen)\(percent)%\(ANSI.reset) \(ANSI.dim)(\(safeDone)/\(total))\(ANSI.reset)"
+
+            if !started { started = true }
+            fputs("\r\u{001B}[2K\(progressLine)", stdout)
+            fflush(stdout)
+        }
+
+        mutating func finish(done: Int) {
+            guard enabled else { return }
+            render(done: done)
+            fputs("\n", stdout)
+            fflush(stdout)
+        }
+    }
+
     private struct InlineImageResult {
         let html: String
         let detected: Int
@@ -47,7 +82,8 @@ struct MarkdownExporter {
         to root: URL,
         mode: ExportMode,
         existingPolicy: ExistingItemPolicy = .overwrite,
-        filenameMode: FilenameMode = .unicodeSafe
+        filenameMode: FilenameMode = .unicodeSafe,
+        includeFrontmatter: Bool = false
     ) throws -> ExportResult {
         let exportRoot = root.appendingPathComponent("notes-export", isDirectory: true)
         try createDirectory(exportRoot)
@@ -55,10 +91,22 @@ struct MarkdownExporter {
         var pathCollisions: [String: Int] = [:]
         var folderCache: [String: URL?] = [:]
         var reservedPaths: Set<String> = []
+        var saveProgress = SaveProgressRenderer(total: notes.count)
+        var processed = 0
+
+        func advanceProgress() {
+            processed += 1
+            if saveProgress.enabled {
+                saveProgress.render(done: processed)
+            }
+        }
 
         for (idx, note) in notes.enumerated() {
-            let accountName = safeFileName(note.account, mode: filenameMode)
-            let folderParts = note.folderPath.map { safeFileName($0, mode: filenameMode) }
+            let normalizedAccount = repairCommonCyrillicMojibake(note.account)
+            let normalizedFolderParts = note.folderPath.map { repairCommonCyrillicMojibake($0) }
+            let normalizedTitle = repairCommonCyrillicMojibake(note.title)
+            let accountName = safeFileName(normalizedAccount, mode: filenameMode)
+            let folderParts = normalizedFolderParts.map { safeFileName($0, mode: filenameMode) }
             guard let folderURL = try resolveFolder(
                 exportRoot: exportRoot,
                 accountName: accountName,
@@ -67,10 +115,11 @@ struct MarkdownExporter {
                 cache: &folderCache
             ) else {
                 print(ANSI.paint("[skip]", ANSI.dim) + " folder conflict for note '\(note.title)'")
+                advanceProgress()
                 continue
             }
 
-            let baseName = safeFileName(note.title.isEmpty ? "Untitled" : note.title, mode: filenameMode)
+            let baseName = safeFileName(normalizedTitle.isEmpty ? "Untitled" : normalizedTitle, mode: filenameMode)
             guard let noteURL = resolveNoteURL(
                 folderURL: folderURL,
                 baseName: baseName,
@@ -81,6 +130,7 @@ struct MarkdownExporter {
                 reservedPaths: &reservedPaths
             ) else {
                 print(ANSI.paint("[skip]", ANSI.dim) + " \(folderURL.path)/\(baseName).md")
+                advanceProgress()
                 continue
             }
             let noteFileName = noteURL.deletingPathExtension().lastPathComponent
@@ -98,7 +148,8 @@ struct MarkdownExporter {
                 baseFolder: folderURL,
                 noteFileName: noteFileName,
                 attachmentSummary: attachmentSummary,
-                htmlSnapshotSaved: htmlSnapshotSaved
+                htmlSnapshotSaved: htmlSnapshotSaved,
+                includeFrontmatter: includeFrontmatter
             )
             do {
                 try markdown.write(to: noteURL, atomically: true, encoding: .utf8)
@@ -106,7 +157,16 @@ struct MarkdownExporter {
                 throw ExportError.writeFailed(noteURL.path)
             }
 
-            print(ANSI.paint("[\(idx + 1)/\(notes.count)]", ANSI.dim) + " \(noteURL.path)")
+            if saveProgress.enabled {
+                advanceProgress()
+            } else {
+                print(ANSI.paint("[\(idx + 1)/\(notes.count)]", ANSI.dim) + " \(noteURL.path)")
+                advanceProgress()
+            }
+        }
+
+        if saveProgress.enabled {
+            saveProgress.finish(done: processed)
         }
 
         if mode == .zip {
@@ -250,7 +310,8 @@ struct MarkdownExporter {
         baseFolder: URL,
         noteFileName: String,
         attachmentSummary: AttachmentExportSummary,
-        htmlSnapshotSaved: Bool
+        htmlSnapshotSaved: Bool,
+        includeFrontmatter: Bool
     ) -> String {
         let inlineImages = note.bodyHTML.isEmpty
             ? InlineImageResult(html: "", detected: 0, decoded: 0, exported: 0, linked: 0, skipped: 0, skipReasons: [:])
@@ -262,23 +323,32 @@ struct MarkdownExporter {
         } else {
             content = htmlToMarkdown(inlineImages.html)
         }
+        let normalizedTitle = repairCommonCyrillicMojibake(note.title.isEmpty ? "Untitled" : note.title)
+        let normalizedAccount = repairCommonCyrillicMojibake(note.account)
+        let normalizedFolder = repairCommonCyrillicMojibake(note.folderPath.joined(separator: "/"))
+        let normalizedContent = repairCommonCyrillicMojibake(content)
         let allAssets = inlineImages.exported + attachmentSummary.exportedCount
 
-        let frontmatter = """
-        ---
-        title: "\(escapeYaml(note.title.isEmpty ? "Untitled" : note.title))"
-        source_account: "\(escapeYaml(note.account))"
-        source_folder: "\(escapeYaml(note.folderPath.joined(separator: "/")))"
-        created: "\(note.createdAt ?? "")"
-        updated: "\(note.updatedAt ?? "")"
-        assets_count: \(allAssets)
-        images_inline_count: \(inlineImages.exported + inlineImages.linked + attachmentSummary.imageEmbeds.count)
-        raw_html_saved: \(htmlSnapshotSaved)
-        ---
+        let frontmatter: String
+        if includeFrontmatter {
+            frontmatter = """
+            ---
+            title: "\(escapeYaml(normalizedTitle))"
+            source_account: "\(escapeYaml(normalizedAccount))"
+            source_folder: "\(escapeYaml(normalizedFolder))"
+            created: "\(note.createdAt ?? "")"
+            updated: "\(note.updatedAt ?? "")"
+            assets_count: \(allAssets)
+            images_inline_count: \(inlineImages.exported + inlineImages.linked + attachmentSummary.imageEmbeds.count)
+            raw_html_saved: \(htmlSnapshotSaved)
+            ---
 
-        """
+            """
+        } else {
+            frontmatter = ""
+        }
 
-        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = normalizedContent.trimmingCharacters(in: .whitespacesAndNewlines)
         var body = trimmed.isEmpty ? "_(empty note)_" : trimmed
         if !attachmentSummary.imageEmbeds.isEmpty {
             body += "\n\n## Graphics\n" + attachmentSummary.imageEmbeds.joined(separator: "\n")
@@ -315,6 +385,32 @@ struct MarkdownExporter {
             body += "\n\n## Source Snapshot\n- [Original HTML](\(snapshotRef))"
         }
         return frontmatter + body + "\n"
+    }
+
+    // Heuristic fix for UTF-8 text that was misinterpreted as Windows-1251
+    // (typical mojibake patterns like: "РўРµРєСЃС‚ ...").
+    private func repairCommonCyrillicMojibake(_ text: String) -> String {
+        let markerPattern = #"(Р.|С.|Ð.|Ñ.)"#
+        guard let markerRegex = try? NSRegularExpression(pattern: markerPattern) else {
+            return text
+        }
+        let markerCount = markerRegex.numberOfMatches(in: text, range: NSRange(text.startIndex..., in: text))
+        let charCount = max(1, text.count)
+        let markerDensity = Double(markerCount) / Double(charCount)
+        // Keep exporter "as-is" by default; auto-repair only when mojibake signal is strong.
+        guard markerCount >= 6, markerDensity >= 0.15 else { return text }
+
+        guard let cp1251Data = text.data(using: .windowsCP1251),
+              let decoded = String(data: cp1251Data, encoding: .utf8) else {
+            return text
+        }
+        let decodedHasCyrillic = decoded.range(of: #"[А-Яа-яЁё]"#, options: .regularExpression) != nil
+        let decodedMarkerCount = markerRegex.numberOfMatches(in: decoded, range: NSRange(decoded.startIndex..., in: decoded))
+        let decodedHasLessMarkers = decodedMarkerCount < markerCount
+        if decodedHasCyrillic && decodedHasLessMarkers {
+            return decoded
+        }
+        return text
     }
 
     private func htmlToMarkdown(_ html: String) -> String {
@@ -479,17 +575,53 @@ struct MarkdownExporter {
     private func writeSourceHTMLIfPresent(note: ExportNote, folder: URL, noteFileName: String, policy: ExistingItemPolicy) -> Bool {
         let raw = note.bodyHTML.trimmingCharacters(in: .whitespacesAndNewlines)
         if raw.isEmpty { return false }
+        let normalizedHTML = repairCommonCyrillicMojibake(raw)
+        let documentHTML = sourceSnapshotDocument(from: normalizedHTML)
 
         let htmlURL = folder.appendingPathComponent("\(noteFileName).source.html")
         if policy == .skip && fileManager.fileExists(atPath: htmlURL.path) {
             return true
         }
         do {
-            try raw.write(to: htmlURL, atomically: true, encoding: .utf8)
+            try documentHTML.write(to: htmlURL, atomically: true, encoding: .utf8)
             return true
         } catch {
             return false
         }
+    }
+
+    private func sourceSnapshotDocument(from htmlFragment: String) -> String {
+        let lower = htmlFragment.lowercased()
+        if lower.contains("<html") {
+            if lower.contains("charset=") { return htmlFragment }
+            if let headRange = htmlFragment.range(of: "<head[^>]*>", options: [.regularExpression, .caseInsensitive]) {
+                let insertion = "\n<meta charset=\"utf-8\">"
+                var out = htmlFragment
+                out.insert(contentsOf: insertion, at: headRange.upperBound)
+                return out
+            }
+            if let htmlOpen = htmlFragment.range(of: "<html[^>]*>", options: [.regularExpression, .caseInsensitive]) {
+                let insertion = "\n<head><meta charset=\"utf-8\"></head>"
+                var out = htmlFragment
+                out.insert(contentsOf: insertion, at: htmlOpen.upperBound)
+                return out
+            }
+            return htmlFragment
+        }
+
+        return """
+        <!doctype html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <title>Notes Snapshot</title>
+        </head>
+        <body>
+        \(htmlFragment)
+        </body>
+        </html>
+        """
     }
 
     private func exportAttachments(

@@ -9,6 +9,7 @@ struct IncrementalModeTests {
         let context = NotesMatrixCLI.IncrementalContext(
             includeAttachments: true,
             filenameMode: .unicodeSafe,
+            includeFrontmatter: false,
             mode: .folderTree
         )
 
@@ -24,6 +25,7 @@ struct IncrementalModeTests {
             version: 1,
             includeAttachments: true,
             filenameMode: .unicodeSafe,
+            includeFrontmatter: false,
             mode: .folderTree,
             notes: [
                 NotesMatrixCLI.ManifestEntry(
@@ -38,6 +40,7 @@ struct IncrementalModeTests {
         let context = NotesMatrixCLI.IncrementalContext(
             includeAttachments: true,
             filenameMode: .unicodeSafe,
+            includeFrontmatter: false,
             mode: .folderTree
         )
 
@@ -52,6 +55,7 @@ struct IncrementalModeTests {
             version: 1,
             includeAttachments: false,
             filenameMode: .unicodeSafe,
+            includeFrontmatter: false,
             mode: .folderTree,
             notes: [
                 NotesMatrixCLI.ManifestEntry(
@@ -66,6 +70,7 @@ struct IncrementalModeTests {
         let context = NotesMatrixCLI.IncrementalContext(
             includeAttachments: true,
             filenameMode: .unicodeSafe,
+            includeFrontmatter: false,
             mode: .folderTree
         )
 

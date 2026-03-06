@@ -2,7 +2,7 @@ import Foundation
 import Darwin
 
 enum NotesMatrixCLI {
-    static let appVersion = "0.1.12"
+    static let appVersion = "0.1.13"
 
     enum ScheduleError: Error, CustomStringConvertible {
         case invalidCommand
@@ -43,6 +43,17 @@ enum NotesMatrixCLI {
         var lastRunMessage: String?
     }
 
+    struct SavedInteractiveSettings: Codable {
+        let outputPath: String
+        let mode: ExportMode
+        let includeAttachments: Bool
+        let existingPolicy: ExistingItemPolicy
+        let filenameMode: FilenameMode
+        let includeFrontmatter: Bool
+        let includeSourceHTML: Bool
+        let incremental: Bool
+    }
+
     static func run() throws {
         if CommandLine.arguments.count > 1 {
             try runNonInteractive(args: Array(CommandLine.arguments.dropFirst()))
@@ -72,6 +83,17 @@ enum NotesMatrixCLI {
             lastScanCount: nil,
             lastRunMessage: nil
         )
+        if let saved = loadInteractiveSettings() {
+            state.outputPath = saved.outputPath
+            state.mode = saved.mode
+            state.includeAttachments = saved.includeAttachments
+            state.existingPolicy = saved.existingPolicy
+            state.filenameMode = saved.filenameMode
+            state.includeFrontmatter = saved.includeFrontmatter
+            state.includeSourceHTML = saved.includeSourceHTML
+            state.incremental = saved.incremental
+            state.lastRunMessage = "Settings loaded"
+        }
         var selectedAction = 0
 
         while true {
@@ -142,6 +164,7 @@ enum NotesMatrixCLI {
         default:
             state.lastRunMessage = "Unknown action"
         }
+        saveInteractiveSettings(from: state)
         return false
     }
 
@@ -354,6 +377,44 @@ enum NotesMatrixCLI {
     static func parseFlag(_ key: String, args: [String]) -> String? {
         guard let idx = args.firstIndex(of: key), idx + 1 < args.count else { return nil }
         return args[idx + 1]
+    }
+
+    private static func interactiveSettingsURL() -> URL {
+        let base = URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
+        return base
+            .appendingPathComponent("Library", isDirectory: true)
+            .appendingPathComponent("Application Support", isDirectory: true)
+            .appendingPathComponent("notes-matrix", isDirectory: true)
+            .appendingPathComponent("settings.json")
+    }
+
+    private static func loadInteractiveSettings() -> SavedInteractiveSettings? {
+        let url = interactiveSettingsURL()
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return try? JSONDecoder().decode(SavedInteractiveSettings.self, from: data)
+    }
+
+    private static func saveInteractiveSettings(from state: InteractiveState) {
+        let payload = SavedInteractiveSettings(
+            outputPath: state.outputPath,
+            mode: state.mode,
+            includeAttachments: state.includeAttachments,
+            existingPolicy: state.existingPolicy,
+            filenameMode: state.filenameMode,
+            includeFrontmatter: state.includeFrontmatter,
+            includeSourceHTML: state.includeSourceHTML,
+            incremental: state.incremental
+        )
+
+        let url = interactiveSettingsURL()
+        do {
+            let dir = url.deletingLastPathComponent()
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let data = try JSONEncoder().encode(payload)
+            try data.write(to: url, options: .atomic)
+        } catch {
+            // Non-fatal: settings persistence should not block export flows.
+        }
     }
 
     static func printSample(_ notes: [ExportNote]) {

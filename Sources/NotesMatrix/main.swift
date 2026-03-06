@@ -672,12 +672,9 @@ enum NotesMatrixCLI {
 
             switch selected {
             case 0:
-                print(ANSI.paint("New output path (Enter keep current, q/b cancel) >", ANSI.brightGreen), terminator: " ")
+                print(ANSI.paint("New output path (Enter keep current) >", ANSI.brightGreen), terminator: " ")
                 if let input = readLine()?.trimmingCharacters(in: .whitespacesAndNewlines) {
-                    let lowered = input.lowercased()
-                    if lowered == "q" || lowered == "b" || lowered == "cancel" || lowered == "back" {
-                        lastMessage = "Output path update cancelled"
-                    } else if !input.isEmpty {
+                    if !input.isEmpty {
                         let path = input
                         state.outputPath = path
                         lastMessage = "Output path updated"

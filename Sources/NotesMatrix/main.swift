@@ -672,7 +672,7 @@ enum NotesMatrixCLI {
 
             switch selected {
             case 0:
-                print(ANSI.paint("New output path (Enter keep current) >", ANSI.brightGreen), terminator: " ")
+                print(ANSI.paint("New output path (press Enter to keep current) >", ANSI.brightGreen), terminator: " ")
                 if let input = readLine()?.trimmingCharacters(in: .whitespacesAndNewlines) {
                     if !input.isEmpty {
                         let path = input

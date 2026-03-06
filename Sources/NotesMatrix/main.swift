@@ -2,7 +2,7 @@ import Foundation
 import Darwin
 
 enum NotesMatrixCLI {
-    static let appVersion = "0.1.13"
+    static let appVersion = "0.1.14"
 
     enum ScheduleError: Error, CustomStringConvertible {
         case invalidCommand
@@ -672,10 +672,18 @@ enum NotesMatrixCLI {
 
             switch selected {
             case 0:
-                print(ANSI.paint("New output path >", ANSI.brightGreen), terminator: " ")
-                if let path = readLine()?.trimmingCharacters(in: .whitespacesAndNewlines), !path.isEmpty {
-                    state.outputPath = path
-                    lastMessage = "Output path updated"
+                print(ANSI.paint("New output path (Enter keep current, q/b cancel) >", ANSI.brightGreen), terminator: " ")
+                if let input = readLine()?.trimmingCharacters(in: .whitespacesAndNewlines) {
+                    let lowered = input.lowercased()
+                    if lowered == "q" || lowered == "b" || lowered == "cancel" || lowered == "back" {
+                        lastMessage = "Output path update cancelled"
+                    } else if !input.isEmpty {
+                        let path = input
+                        state.outputPath = path
+                        lastMessage = "Output path updated"
+                    } else {
+                        lastMessage = "Output path unchanged"
+                    }
                 } else {
                     lastMessage = "Output path unchanged"
                 }
